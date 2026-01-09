@@ -1,0 +1,524 @@
+{
+  "info": {
+    "name": "GoFlow API",
+    "description": "Enterprise Integration Platform as a Service (iPaaS) API\n\nS-Tier production quality with:\n- Circuit breaker pattern\n- Multi-tenant ready\n- Worker pool concurrency\n- SOC2/GDPR compliant",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "goflow-api-v030",
+    "version": "0.3.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "workflowId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "credentialId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.token) {",
+                  "        pm.collectionVariables.set('token', response.data.token);",
+                  "        console.log('Token saved:', response.data.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@goflow.dev\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Create a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.token) {",
+                  "        pm.collectionVariables.set('token', response.data.token);",
+                  "        console.log('Token saved:', response.data.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@goflow.dev\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticate and get JWT token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Credentials",
+      "item": [
+        {
+          "name": "Create Slack Credential",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.collectionVariables.set('credentialId', response.data.id);",
+                  "        console.log('Credential ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_name\": \"slack\",\n  \"api_key\": \"https://hooks.slack.com/services/T00000000/B00000000/XXXX\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/credentials",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "credentials"]
+            },
+            "description": "Save encrypted Slack webhook URL"
+          },
+          "response": []
+        },
+        {
+          "name": "List Credentials",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/credentials",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "credentials"]
+            },
+            "description": "Get all saved credentials (decrypted)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "item": [
+        {
+          "name": "Create Webhook Workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.collectionVariables.set('workflowId', response.data.id);",
+                  "        console.log('Workflow ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Slack Alert\",\n  \"trigger_type\": \"webhook\",\n  \"action_type\": \"slack_message\",\n  \"config_json\": \"{\\\"credential_id\\\":\\\"{{credentialId}}\\\",\\\"slack_message\\\":\\\"Alert triggered from API!\\\"}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "workflows"]
+            },
+            "description": "Create a webhook-triggered workflow"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Scheduled Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Daily Weather Check\",\n  \"trigger_type\": \"schedule\",\n  \"action_type\": \"weather_check\",\n  \"config_json\": \"{\\\"credential_id\\\":\\\"{{credentialId}}\\\",\\\"city\\\":\\\"London\\\",\\\"interval\\\":60}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "workflows"]
+            },
+            "description": "Create a scheduled workflow (runs every X minutes)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Workflows",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "workflows"]
+            },
+            "description": "Get all workflows for authenticated user"
+          },
+          "response": []
+        },
+        {
+          "name": "Dry Run Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action_type\": \"slack_message\",\n  \"config_json\": \"{\\\"credential_id\\\":\\\"{{credentialId}}\\\",\\\"slack_message\\\":\\\"Test message from dry run\\\"}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows/dry-run",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "workflows", "dry-run"]
+            },
+            "description": "Test workflow without saving to database"
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Workflow",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows/{{workflowId}}/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "workflows", "{{workflowId}}", "toggle"]
+            },
+            "description": "Enable or disable a workflow"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Workflow",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows/{{workflowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "workflows", "{{workflowId}}"]
+            },
+            "description": "Permanently delete a workflow"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Trigger Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"test_trigger\",\n  \"user\": {\n    \"name\": \"Alex\",\n    \"email\": \"alex@example.com\"\n  },\n  \"order\": {\n    \"id\": \"12345\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/{{workflowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "{{workflowId}}"]
+            },
+            "description": "Trigger a webhook workflow (no auth required)"
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Webhook (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"test_trigger\",\n  \"data\": \"This request is idempotent\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/{{workflowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "{{workflowId}}"]
+            },
+            "description": "Trigger webhook with idempotency key (cached for 24h)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "item": [
+        {
+          "name": "Get All Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "logs"]
+            },
+            "description": "Get all execution logs"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Logs by Workflow",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/logs?workflow_id={{workflowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "logs"],
+              "query": [
+                {
+                  "key": "workflow_id",
+                  "value": "{{workflowId}}"
+                }
+              ]
+            },
+            "description": "Get logs filtered by workflow ID"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Comprehensive health check"
+          },
+          "response": []
+        },
+        {
+          "name": "Liveness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Kubernetes liveness probe"
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "Kubernetes readiness probe"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ]
+}
+

@@ -2,59 +2,72 @@ package connectors
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
-// DiscordWebhook sends a message to Discord using a webhook
+// DiscordWebhook handles Discord webhook integrations
 type DiscordWebhook struct {
 	WebhookURL string
 }
 
+// DiscordMessage represents a Discord message payload
+type DiscordMessage struct {
+	Content string `json:"content"`
+}
+
 // Execute sends a message to Discord
 func (d *DiscordWebhook) Execute(message string) Result {
-	if d.WebhookURL == "" {
-		return Result{
-			Status:  "failed",
-			Message: "Discord webhook URL is not configured",
-		}
+	return d.ExecuteWithContext(context.Background(), message)
+}
+
+// ExecuteWithContext sends a message to Discord with context awareness
+func (d *DiscordWebhook) ExecuteWithContext(ctx context.Context, message string) Result {
+	start := time.Now()
+
+	select {
+	case <-ctx.Done():
+		return NewCancelledResult("Context cancelled before Discord request: " + ctx.Err().Error())
+	default:
 	}
 
-	payload := map[string]string{
-		"content": message,
-	}
-
+	payload := DiscordMessage{Content: message}
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return Result{
-			Status:  "failed",
-			Message: fmt.Sprintf("Failed to marshal JSON: %v", err),
-		}
+		return NewFailureResult(fmt.Sprintf("Failed to marshal Discord payload: %v", err), start)
 	}
 
-	resp, err := http.Post(d.WebhookURL, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", d.WebhookURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return Result{
-			Status:  "failed",
-			Message: fmt.Sprintf("Failed to send request to Discord: %v", err),
-		}
+		return NewFailureResult(fmt.Sprintf("Failed to create Discord request: %v", err), start)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Do(req)
+
+	select {
+	case <-ctx.Done():
+		return NewCancelledResult("Context cancelled during Discord request: " + ctx.Err().Error())
+	default:
+	}
+
+	if err != nil {
+		return NewFailureResult(fmt.Sprintf("Discord webhook request failed: %v", err), start)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return Result{
-			Status:  "failed",
-			Message: fmt.Sprintf("Discord returned error status: %d", resp.StatusCode),
-		}
+		return NewFailureResult(fmt.Sprintf("Discord returned error status: %d", resp.StatusCode), start)
 	}
 
-	return Result{
-		Status:  "success",
-		Message: fmt.Sprintf("Message sent to Discord successfully"),
-		Data: map[string]interface{}{
-			"status_code": resp.StatusCode,
-		},
-	}
+	return NewSuccessResult("Discord message sent successfully", map[string]interface{}{
+		"status_code": resp.StatusCode,
+		"message":     message,
+	}, start)
 }
-

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import ProtectedLayout from '@/components/ProtectedRoute'
 import { clearToken } from '@/lib/api'
@@ -33,12 +34,22 @@ export default function DashboardLayout({
       <div className="flex min-h-screen bg-gray-50">
         {/* Sidebar */}
         <aside className="w-64 bg-white border-r">
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-primary">iPaaS</h1>
-            <p className="text-sm text-muted-foreground">Integration Platform</p>
+          <div className="p-6 border-b">
+            <div className="flex items-center space-x-3">
+              <Image
+                src="/goflow-logo.png"
+                alt="GoFlow"
+                width={40}
+                height={40}
+              />
+              <div>
+                <h1 className="text-xl font-bold text-primary">GoFlow</h1>
+                <p className="text-xs text-muted-foreground">Integration Platform</p>
+              </div>
+            </div>
           </div>
           
-          <nav className="px-4 space-y-2">
+          <nav className="px-4 py-6 space-y-2">
             <Link href="/dashboard">
               <div className={`px-4 py-2 rounded-md transition-colors cursor-pointer ${
                 activeTab === 'dashboard' 

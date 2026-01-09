@@ -9,13 +9,16 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// WebhookHandler handles webhook-related HTTP requests  
+// PRODUCTION: Uses Store interface for testability
 type WebhookHandler struct {
-	db       *db.Database
+	store    db.Store // Interface, not concrete type!
 	executor *engine.Executor
 }
 
-func NewWebhookHandler(database *db.Database, executor *engine.Executor) *WebhookHandler {
-	return &WebhookHandler{db: database, executor: executor}
+// NewWebhookHandler creates a new webhook handler
+func NewWebhookHandler(store db.Store, executor *engine.Executor) *WebhookHandler {
+	return &WebhookHandler{store: store, executor: executor}
 }
 
 // TriggerWebhook handles incoming webhook requests
@@ -24,7 +27,7 @@ func (h *WebhookHandler) TriggerWebhook(w http.ResponseWriter, r *http.Request) 
 	workflowID := vars["id"]
 
 	// Lookup the workflow
-	workflow, err := h.db.GetWorkflowByID(workflowID)
+	workflow, err := h.store.GetWorkflowByID(workflowID)
 	if err != nil {
 		http.Error(w, "Workflow not found", http.StatusNotFound)
 		return

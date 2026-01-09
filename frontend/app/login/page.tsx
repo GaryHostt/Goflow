@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { auth, setToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,9 +40,18 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>Login to iPaaS</CardTitle>
-          <CardDescription>Enter your email and password to access your account</CardDescription>
+        <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <Image
+              src="/goflow-logo.png"
+              alt="GoFlow Logo"
+              width={120}
+              height={120}
+              priority
+            />
+          </div>
+          <CardTitle>Welcome to GoFlow</CardTitle>
+          <CardDescription>Sign in to your integration platform</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -80,13 +90,13 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
               Don't have an account?{' '}
               <Link href="/register" className="text-primary hover:underline">
-                Register
+                Create account
               </Link>
             </p>
           </form>

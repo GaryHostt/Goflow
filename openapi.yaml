@@ -1,0 +1,898 @@
+openapi: 3.0.3
+info:
+  title: GoFlow API
+  description: |
+    Enterprise Integration Platform as a Service (iPaaS) API
+    
+    **Features:**
+    - Multi-user authentication with JWT
+    - Workflow automation (webhooks, scheduled tasks)
+    - Third-party connectors (Slack, Discord, OpenWeather)
+    - Execution logging and monitoring
+    - Dry run testing
+    - Rate limiting and idempotency
+    
+    **Architecture Highlights:**
+    - S-Tier production quality with circuit breaker pattern
+    - Multi-tenant ready with repository pattern
+    - Worker pool for bounded concurrency
+    - Context-aware execution with graceful cancellation
+    - SOC2/GDPR compliant logging with secret masking
+    
+  version: 0.3.0
+  contact:
+    name: GoFlow Support
+    email: support@goflow.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.goflow.dev
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: Workflows
+    description: Workflow management and execution
+  - name: Credentials
+    description: Encrypted third-party API credentials
+  - name: Webhooks
+    description: Webhook trigger endpoints
+  - name: Logs
+    description: Execution history and logs
+  - name: Health
+    description: Health check endpoints
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account with email and password
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              example1:
+                value:
+                  email: user@example.com
+                  password: securePassword123
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                example1:
+                  value:
+                    success: true
+                    data:
+                      id: user_abc123
+                      email: user@example.com
+                      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user and receive JWT token
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              example1:
+                value:
+                  email: user@example.com
+                  password: securePassword123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/credentials:
+    post:
+      tags:
+        - Credentials
+      summary: Save encrypted credentials
+      description: Store encrypted API keys or webhook URLs for third-party services
+      operationId: createCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRequest'
+            examples:
+              slack:
+                value:
+                  service_name: slack
+                  api_key: https://hooks.slack.com/services/T00/B00/XXXX
+              discord:
+                value:
+                  service_name: discord
+                  api_key: https://discord.com/api/webhooks/123/abc
+      responses:
+        '201':
+          description: Credential saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    
+    get:
+      tags:
+        - Credentials
+      summary: List user credentials
+      description: Retrieve all credentials for the authenticated user (decrypted)
+      operationId: listCredentials
+      responses:
+        '200':
+          description: List of credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Credential'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/workflows:
+    post:
+      tags:
+        - Workflows
+      summary: Create a new workflow
+      description: Create a workflow with trigger and action configuration
+      operationId: createWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowRequest'
+            examples:
+              slackWebhook:
+                summary: Webhook-triggered Slack notification
+                value:
+                  name: Slack Alert
+                  trigger_type: webhook
+                  action_type: slack_message
+                  config_json: '{"credential_id":"cred_123","slack_message":"Alert triggered!"}'
+              scheduledWeather:
+                summary: Scheduled weather check
+                value:
+                  name: Daily Weather Check
+                  trigger_type: schedule
+                  action_type: weather_check
+                  config_json: '{"credential_id":"cred_456","city":"London","interval":60}'
+      responses:
+        '201':
+          description: Workflow created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    
+    get:
+      tags:
+        - Workflows
+      summary: List user workflows
+      description: Retrieve all workflows for the authenticated user
+      operationId: listWorkflows
+      responses:
+        '200':
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Workflow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/workflows/dry-run:
+    post:
+      tags:
+        - Workflows
+      summary: Test workflow (dry run)
+      description: |
+        Execute a workflow configuration without saving to database.
+        Useful for testing integrations before committing.
+      operationId: dryRunWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DryRunRequest'
+            examples:
+              slackTest:
+                value:
+                  action_type: slack_message
+                  config_json: '{"credential_id":"cred_123","slack_message":"Test message"}'
+      responses:
+        '200':
+          description: Dry run executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DryRunResponse'
+              examples:
+                success:
+                  value:
+                    success: true
+                    message: Slack message sent successfully
+                    duration: 150ms
+                    timestamp: '2026-01-08T15:30:00Z'
+                    data:
+                      status_code: 200
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/workflows/{id}/toggle:
+    put:
+      tags:
+        - Workflows
+      summary: Toggle workflow active state
+      description: Enable or disable a workflow
+      operationId: toggleWorkflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow ID
+          example: wf_abc123
+      responses:
+        '200':
+          description: Workflow toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      is_active:
+                        type: boolean
+                        example: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/workflows/{id}:
+    delete:
+      tags:
+        - Workflows
+      summary: Delete workflow
+      description: Permanently delete a workflow
+      operationId: deleteWorkflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow ID
+          example: wf_abc123
+      responses:
+        '204':
+          description: Workflow deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/webhooks/{id}:
+    post:
+      tags:
+        - Webhooks
+      summary: Trigger webhook workflow
+      description: |
+        Trigger a webhook-based workflow. This is a public endpoint that doesn't require authentication.
+        
+        **Features:**
+        - Supports idempotency keys (X-Idempotency-Key header)
+        - Rate limited per tenant
+        - Asynchronous execution via worker pool
+      operationId: triggerWebhook
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Workflow ID
+          example: wf_abc123
+        - name: X-Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional idempotency key to prevent duplicate executions
+          example: uuid-12345-67890
+      requestBody:
+        description: Webhook payload (any JSON data)
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              example1:
+                value:
+                  event: user_signed_up
+                  user:
+                    name: Alex
+                    email: alex@example.com
+      responses:
+        '200':
+          description: Webhook triggered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Workflow triggered successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/logs:
+    get:
+      tags:
+        - Logs
+      summary: Get execution logs
+      description: Retrieve execution logs for user's workflows
+      operationId: getLogs
+      parameters:
+        - name: workflow_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter logs by workflow ID
+          example: wf_abc123
+      responses:
+        '200':
+          description: Execution logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Log'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Comprehensive health check
+      description: |
+        Returns comprehensive health status including:
+        - Database connectivity
+        - Runtime status
+        - Service uptime
+        - Version information
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  value:
+                    status: healthy
+                    version: 0.3.0
+                    uptime: 2h15m30s
+                    timestamp: '2026-01-08T15:30:00Z'
+                    checks:
+                      database: ok
+                      runtime: ok
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                unhealthy:
+                  value:
+                    status: unhealthy
+                    version: 0.3.0
+                    uptime: 2h15m30s
+                    timestamp: '2026-01-08T15:30:00Z'
+                    checks:
+                      database: 'error: database is locked'
+                      runtime: ok
+
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe (Kubernetes)
+      description: Simple liveness check for container orchestration
+      operationId: livenessCheck
+      security: []
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: alive
+
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe (Kubernetes)
+      description: Check if service is ready to accept traffic
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        '503':
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: not_ready
+                  reason:
+                    type: string
+                    example: database_unavailable
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/auth/login or /api/auth/register
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: securePassword123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: securePassword123
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              example: user_abc123
+            email:
+              type: string
+              example: user@example.com
+            token:
+              type: string
+              example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    CredentialRequest:
+      type: object
+      required:
+        - service_name
+        - api_key
+      properties:
+        service_name:
+          type: string
+          enum: [slack, discord, openweather]
+          example: slack
+        api_key:
+          type: string
+          description: API key or webhook URL (will be encrypted)
+          example: https://hooks.slack.com/services/T00/B00/XXXX
+
+    CredentialResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Credential'
+
+    Credential:
+      type: object
+      properties:
+        id:
+          type: string
+          example: cred_abc123
+        user_id:
+          type: string
+          example: user_abc123
+        service_name:
+          type: string
+          example: slack
+        encrypted_key:
+          type: string
+          description: Decrypted key (only in GET responses)
+          example: https://hooks.slack.com/services/T00/B00/XXXX
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-01-08T12:00:00Z'
+
+    WorkflowRequest:
+      type: object
+      required:
+        - name
+        - trigger_type
+        - action_type
+        - config_json
+      properties:
+        name:
+          type: string
+          example: Slack Alert
+        trigger_type:
+          type: string
+          enum: [webhook, schedule]
+          example: webhook
+        action_type:
+          type: string
+          enum: [slack_message, discord_post, weather_check]
+          example: slack_message
+        config_json:
+          type: string
+          description: JSON string containing workflow configuration
+          example: '{"credential_id":"cred_123","slack_message":"Alert!"}'
+
+    WorkflowResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Workflow'
+
+    Workflow:
+      type: object
+      properties:
+        id:
+          type: string
+          example: wf_abc123
+        user_id:
+          type: string
+          example: user_abc123
+        name:
+          type: string
+          example: Slack Alert
+        trigger_type:
+          type: string
+          example: webhook
+        action_type:
+          type: string
+          example: slack_message
+        config_json:
+          type: string
+          example: '{"credential_id":"cred_123","slack_message":"Alert!"}'
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-01-08T12:00:00Z'
+        last_executed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-01-08T14:30:00Z'
+
+    DryRunRequest:
+      type: object
+      required:
+        - action_type
+        - config_json
+      properties:
+        action_type:
+          type: string
+          enum: [slack_message, discord_post, weather_check]
+          example: slack_message
+        config_json:
+          type: string
+          example: '{"credential_id":"cred_123","slack_message":"Test"}'
+
+    DryRunResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Slack message sent successfully
+        duration:
+          type: string
+          example: 150ms
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-01-08T15:30:00Z'
+        data:
+          type: object
+          additionalProperties: true
+
+    Log:
+      type: object
+      properties:
+        id:
+          type: string
+          example: log_abc123
+        workflow_id:
+          type: string
+          example: wf_abc123
+        workflow_name:
+          type: string
+          example: Slack Alert
+        status:
+          type: string
+          enum: [success, failed, cancelled]
+          example: success
+        message:
+          type: string
+          example: Slack message sent successfully
+        executed_at:
+          type: string
+          format: date-time
+          example: '2026-01-08T14:30:00Z'
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: healthy
+        version:
+          type: string
+          example: 0.3.0
+        uptime:
+          type: string
+          example: 2h15m30s
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-01-08T15:30:00Z'
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            database: ok
+            runtime: ok
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Error message
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example1:
+              value:
+                success: false
+                error: Invalid request payload
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example1:
+              value:
+                success: false
+                error: Unauthorized
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example1:
+              value:
+                success: false
+                error: Resource not found
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Rate limit per second
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example1:
+              value:
+                success: false
+                error: Rate limit exceeded. Please try again later.
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            example1:
+              value:
+                success: false
+                error: Internal server error
+

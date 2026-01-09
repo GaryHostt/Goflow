@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -14,14 +15,15 @@ import (
 	"github.com/alexmacdonald/simple-ipass/internal/logger"
 	"github.com/alexmacdonald/simple-ipass/internal/middleware"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 )
 
 func main() {
 	// Initialize structured logger (ELK-ready!)
 	appLogger := logger.NewLogger("ipaas-api")
 	appLogger.Info("Starting iPaaS API Server...", map[string]interface{}{
-		"version": "0.1.0",
-		"env":     os.Getenv("ENVIRONMENT"),
+		"version": "0.2.0",
+		"env":     getEnv("ENVIRONMENT", "development"),
 	})
 
 	// Initialize database
@@ -44,38 +46,23 @@ func main() {
 	scheduler.Start(60 * time.Second) // Check every 60 seconds
 	defer scheduler.Stop()
 
-	// Setup graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		sig := <-sigChan
-		appLogger.Info("Shutting down gracefully...", map[string]interface{}{
-			"signal": sig.String(),
-		})
-		scheduler.Stop()
-		database.Close()
-		os.Exit(0)
-	}()
-
-	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(database)
-	credentialsHandler := handlers.NewCredentialsHandler(database)
-	workflowsHandler := handlers.NewWorkflowsHandler(database, executor)
-	webhookHandler := handlers.NewWebhookHandler(database, executor)
-	logsHandler := handlers.NewLogsHandler(database)
-
 	// Setup router
 	router := mux.NewRouter()
 
 	// Public routes
+	authHandler := handlers.NewAuthHandler(database)
 	router.HandleFunc("/api/auth/register", authHandler.Register).Methods("POST")
 	router.HandleFunc("/api/auth/login", authHandler.Login).Methods("POST")
+
+	// Webhook handler (public but workflow-specific)
+	webhookHandler := handlers.NewWebhookHandler(database, executor)
 	router.HandleFunc("/api/webhooks/{id}", webhookHandler.TriggerWebhook).Methods("POST")
 
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy"}`))
+		w.Write([]byte(`{"status":"healthy","version":"0.2.0"}`))
 	}).Methods("GET")
 
 	// Protected routes with tenant-aware middleware
@@ -83,59 +70,220 @@ func main() {
 	api.Use(middleware.AuthMiddleware(appLogger)) // Now logs user_id AND tenant_id!
 
 	// Credentials routes
+	credentialsHandler := handlers.NewCredentialsHandler(database)
 	api.HandleFunc("/credentials", credentialsHandler.CreateCredential).Methods("POST")
 	api.HandleFunc("/credentials", credentialsHandler.GetCredentials).Methods("GET")
 
 	// Workflows routes
+	workflowsHandler := handlers.NewWorkflowsHandler(database, executor)
 	api.HandleFunc("/workflows", workflowsHandler.CreateWorkflow).Methods("POST")
 	api.HandleFunc("/workflows", workflowsHandler.GetWorkflows).Methods("GET")
+	api.HandleFunc("/workflows/dry-run", workflowsHandler.DryRunWorkflow).Methods("POST") // NEW: Dry run endpoint
 	api.HandleFunc("/workflows/{id}/toggle", workflowsHandler.ToggleWorkflow).Methods("PUT")
 	api.HandleFunc("/workflows/{id}", workflowsHandler.DeleteWorkflow).Methods("DELETE")
 
 	// Logs routes
+	logsHandler := handlers.NewLogsHandler(database)
 	api.HandleFunc("/logs", logsHandler.GetLogs).Methods("GET")
 
-	// Add CORS middleware with logging
-	corsRouter := enableCORS(router, appLogger)
+	// PRODUCTION FIX: Use battle-tested CORS library instead of manual headers
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: getAllowedOrigins(),
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Content-Type",
+			"Authorization",
+			"X-Requested-With",
+		},
+		ExposedHeaders: []string{
+			"Content-Length",
+			"Content-Type",
+		},
+		AllowCredentials: true,
+		MaxAge:           300, // 5 minutes
+		Debug:            getEnv("ENVIRONMENT", "development") == "development",
+	}).Handler(router)
 
-	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// PRODUCTION FIX: Create HTTP server with proper timeouts
+	port := getEnv("PORT", "8080")
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: corsHandler,
+		
+		// Timeout configurations to prevent resource exhaustion
+		ReadTimeout:       15 * time.Second, // Time to read request body
+		ReadHeaderTimeout: 10 * time.Second, // Time to read request headers
+		WriteTimeout:      30 * time.Second, // Time to write response (increased for long-running workflows)
+		IdleTimeout:       120 * time.Second, // Time to keep connection open for next request
+		
+		// Maximum header size
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
-	appLogger.Info("Server listening", map[string]interface{}{
-		"port": port,
-		"endpoints": map[string]interface{}{
-			"health":   "/health",
-			"auth":     "/api/auth/*",
-			"webhooks": "/api/webhooks/:id",
-			"api":      "/api/*",
-		},
+	appLogger.Info("Server configured with production timeouts", map[string]interface{}{
+		"port":               port,
+		"read_timeout":       srv.ReadTimeout.String(),
+		"write_timeout":      srv.WriteTimeout.String(),
+		"idle_timeout":       srv.IdleTimeout.String(),
+		"max_header_bytes":   srv.MaxHeaderBytes,
 	})
 
-	log.Fatal(http.ListenAndServe(":"+port, corsRouter))
-}
+	// Setup graceful shutdown with context
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	defer shutdownCancel()
 
-// enableCORS adds CORS headers with logging
-func enableCORS(router *mux.Router, appLogger *logger.Logger) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// Channel to listen for interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// Log all requests (ELK will capture these)
-		appLogger.Debug("HTTP Request", map[string]interface{}{
-			"method": r.Method,
-			"path":   r.URL.Path,
-			"ip":     r.RemoteAddr,
+	// Start server in goroutine
+	go func() {
+		appLogger.Info("Server listening", map[string]interface{}{
+			"port": port,
+			"endpoints": map[string]interface{}{
+				"health":   "/health",
+				"auth":     "/api/auth/*",
+				"webhooks": "/api/webhooks/:id",
+				"api":      "/api/*",
+			},
 		})
 
-		router.ServeHTTP(w, r)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			appLogger.Error("Server failed to start", map[string]interface{}{
+				"error": err.Error(),
+			})
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	sig := <-sigChan
+	appLogger.Info("Received shutdown signal", map[string]interface{}{
+		"signal": sig.String(),
 	})
+
+	// Graceful shutdown with timeout
+	shutdownTimeout := 30 * time.Second
+	ctx, cancel := context.WithTimeout(shutdownCtx, shutdownTimeout)
+	defer cancel()
+
+	appLogger.Info("Initiating graceful shutdown...", map[string]interface{}{
+		"timeout": shutdownTimeout.String(),
+	})
+
+	// Stop scheduler first
+	scheduler.Stop()
+	appLogger.Info("Scheduler stopped", nil)
+
+	// Shutdown HTTP server
+	if err := srv.Shutdown(ctx); err != nil {
+		appLogger.Error("Server shutdown error", map[string]interface{}{
+			"error": err.Error(),
+		})
+		log.Printf("Server forced to shutdown: %v", err)
+	}
+
+	// Close database
+	database.Close()
+	appLogger.Info("Database closed", nil)
+
+	appLogger.Info("Graceful shutdown complete", nil)
+}
+
+// getAllowedOrigins returns CORS allowed origins based on environment
+func getAllowedOrigins() []string {
+	env := getEnv("ENVIRONMENT", "development")
+	
+	if env == "production" {
+		// Production: Only allow specific domains
+		allowedOrigins := getEnv("CORS_ALLOWED_ORIGINS", "")
+		if allowedOrigins != "" {
+			// Parse comma-separated list
+			return parseCSV(allowedOrigins)
+		}
+		// Default production origins
+		return []string{
+			"https://app.ipaas.com",
+			"https://dashboard.ipaas.com",
+		}
+	}
+	
+	// Development: Allow localhost and common dev ports
+	return []string{
+		"http://localhost:3000",
+		"http://localhost:3001",
+		"http://localhost:8080",
+		"http://127.0.0.1:3000",
+	}
+}
+
+// parseCSV splits a comma-separated string into a slice
+func parseCSV(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	var result []string
+	for _, item := range splitString(s, ",") {
+		trimmed := trimSpace(item)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+// splitString splits a string by delimiter
+func splitString(s, delimiter string) []string {
+	if s == "" {
+		return []string{}
+	}
+	// Simple split implementation
+	var result []string
+	current := ""
+	for _, char := range s {
+		if string(char) == delimiter {
+			if current != "" {
+				result = append(result, current)
+				current = ""
+			}
+		} else {
+			current += string(char)
+		}
+	}
+	if current != "" {
+		result = append(result, current)
+	}
+	return result
+}
+
+// trimSpace removes leading and trailing whitespace
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+	
+	// Trim leading spaces
+	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+		start++
+	}
+	
+	// Trim trailing spaces
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	
+	return s[start:end]
+}
+
+// getEnv gets an environment variable with a default fallback
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

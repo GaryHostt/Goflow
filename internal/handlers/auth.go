@@ -13,12 +13,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// AuthHandler handles authentication-related HTTP requests
+// PRODUCTION: Uses Store interface for testability
 type AuthHandler struct {
-	db *db.Database
+	store db.Store // Interface, not concrete type!
 }
 
-func NewAuthHandler(database *db.Database) *AuthHandler {
-	return &AuthHandler{db: database}
+// NewAuthHandler creates a new auth handler
+func NewAuthHandler(store db.Store) *AuthHandler {
+	return &AuthHandler{store: store}
 }
 
 // Register handles user registration
@@ -55,7 +58,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create user
-	user, err := h.db.CreateUser(req.Email, string(hashedPassword))
+	user, err := h.store.CreateUser(req.Email, string(hashedPassword))
 	if err != nil {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
@@ -93,7 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user by email
-	user, err := h.db.GetUserByEmail(req.Email)
+	user, err := h.store.GetUserByEmail(req.Email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)

@@ -73,8 +73,12 @@ docker-clean: ## Remove Docker containers, volumes, and images
 	docker-compose down -v
 	docker system prune -f
 
-test: ## Run E2E tests
-	@echo "Running end-to-end tests..."
+test: ## Run unit tests (fast, uses MockStore)
+	@echo "Running unit tests with MockStore..."
+	go test ./internal/engine/... -v -count=1
+
+test-integration: ## Run E2E integration tests
+	@echo "Running end-to-end integration tests..."
 	go test ./scripts/e2e_test.go -v
 
 test-elk: ## Run E2E tests with ELK validation
@@ -83,12 +87,20 @@ test-elk: ## Run E2E tests with ELK validation
 
 test-coverage: ## Run tests with coverage report
 	@echo "Running tests with coverage..."
-	go test ./scripts/e2e_test.go -v -cover
+	go test ./internal/... -v -cover -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "✅ Coverage report: coverage.html"
+
+test-bench: ## Run performance benchmarks
+	@echo "Running benchmarks..."
+	go test ./internal/engine/... -bench=. -benchmem
 
 test-clean: ## Clean up test databases
-	@echo "Cleaning test databases..."
-	rm -f ipaas_test.db test_*.db
-	@echo "✅ Test databases cleaned!"
+	@echo "Cleaning test databases and coverage files..."
+	rm -f ipaas_test.db test_*.db coverage.out coverage.html
+	@echo "✅ Test artifacts cleaned!"
+
+test-all: test test-integration test-coverage ## Run all tests with coverage
 
 .DEFAULT_GOAL := help
 

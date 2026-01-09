@@ -8,12 +8,15 @@ import (
 	"github.com/alexmacdonald/simple-ipass/internal/middleware"
 )
 
+// CredentialsHandler handles credential management HTTP requests
+// PRODUCTION: Uses Store interface for testability
 type CredentialsHandler struct {
-	db *db.Database
+	store db.Store // Interface, not concrete type!
 }
 
-func NewCredentialsHandler(database *db.Database) *CredentialsHandler {
-	return &CredentialsHandler{db: database}
+// NewCredentialsHandler creates a new credentials handler
+func NewCredentialsHandler(store db.Store) *CredentialsHandler {
+	return &CredentialsHandler{store: store}
 }
 
 type CreateCredentialRequest struct {
@@ -41,7 +44,7 @@ func (h *CredentialsHandler) CreateCredential(w http.ResponseWriter, r *http.Req
 	}
 
 	// Create credential with encryption
-	cred, err := h.db.CreateCredential(userID, req.ServiceName, req.APIKey)
+	cred, err := h.store.CreateCredential(userID, req.ServiceName, req.APIKey)
 	if err != nil {
 		http.Error(w, "Failed to save credential", http.StatusInternalServerError)
 		return
@@ -64,7 +67,7 @@ func (h *CredentialsHandler) GetCredentials(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	creds, err := h.db.GetCredentialsByUserID(userID)
+	creds, err := h.store.GetCredentialsByUserID(userID)
 	if err != nil {
 		http.Error(w, "Failed to fetch credentials", http.StatusInternalServerError)
 		return

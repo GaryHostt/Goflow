@@ -1,99 +1,87 @@
 package connectors
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
-// OpenWeatherAPI fetches weather data from OpenWeather API
+// OpenWeatherAPI handles OpenWeather API integrations
 type OpenWeatherAPI struct {
 	APIKey string
 }
 
-// WeatherData represents the weather response structure
+// WeatherData represents the OpenWeather API response
 type WeatherData struct {
+	Main struct {
+		Temp     float64 `json:"temp"`
+		Humidity int     `json:"humidity"`
+	} `json:"main"`
 	Weather []struct {
 		Main        string `json:"main"`
 		Description string `json:"description"`
 	} `json:"weather"`
-	Main struct {
-		Temp      float64 `json:"temp"`
-		FeelsLike float64 `json:"feels_like"`
-		TempMin   float64 `json:"temp_min"`
-		TempMax   float64 `json:"temp_max"`
-		Humidity  int     `json:"humidity"`
-	} `json:"main"`
 	Name string `json:"name"`
 }
 
 // FetchWeather retrieves weather data for a city
-func (o *OpenWeatherAPI) FetchWeather(city string) Result {
-	if o.APIKey == "" {
-		return Result{
-			Status:  "failed",
-			Message: "OpenWeather API key is not configured",
-		}
+func (w *OpenWeatherAPI) FetchWeather(city string) Result {
+	return w.FetchWeatherWithContext(context.Background(), city)
+}
+
+// FetchWeatherWithContext retrieves weather data with context awareness
+func (w *OpenWeatherAPI) FetchWeatherWithContext(ctx context.Context, city string) Result {
+	start := time.Now()
+
+	select {
+	case <-ctx.Done():
+		return NewCancelledResult("Context cancelled before weather request: " + ctx.Err().Error())
+	default:
 	}
 
-	if city == "" {
-		return Result{
-			Status:  "failed",
-			Message: "City parameter is required",
-		}
-	}
+	url := fmt.Sprintf("https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", city, w.APIKey)
 
-	url := fmt.Sprintf("https://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", city, o.APIKey)
-
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return Result{
-			Status:  "failed",
-			Message: fmt.Sprintf("Failed to fetch weather data: %v", err),
-		}
+		return NewFailureResult(fmt.Sprintf("Failed to create weather request: %v", err), start)
+	}
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Do(req)
+
+	select {
+	case <-ctx.Done():
+		return NewCancelledResult("Context cancelled during weather request: " + ctx.Err().Error())
+	default:
+	}
+
+	if err != nil {
+		return NewFailureResult(fmt.Sprintf("OpenWeather API request failed: %v", err), start)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return Result{
-			Status:  "failed",
-			Message: fmt.Sprintf("OpenWeather API returned error status: %d", resp.StatusCode),
-		}
+		return NewFailureResult(fmt.Sprintf("OpenWeather returned error status: %d", resp.StatusCode), start)
 	}
 
-	var weatherData WeatherData
-	if err := json.NewDecoder(resp.Body).Decode(&weatherData); err != nil {
-		return Result{
-			Status:  "failed",
-			Message: fmt.Sprintf("Failed to parse weather data: %v", err),
-		}
+	var weather WeatherData
+	if err := json.NewDecoder(resp.Body).Decode(&weather); err != nil {
+		return NewFailureResult(fmt.Sprintf("Failed to decode weather response: %v", err), start)
 	}
 
-	weatherCondition := "Unknown"
-	weatherDesc := "Unknown"
-	if len(weatherData.Weather) > 0 {
-		weatherCondition = weatherData.Weather[0].Main
-		weatherDesc = weatherData.Weather[0].Description
+	description := "N/A"
+	if len(weather.Weather) > 0 {
+		description = weather.Weather[0].Description
 	}
 
-	message := fmt.Sprintf("Weather in %s: %s (%s), Temperature: %.1f°C, Humidity: %d%%",
-		weatherData.Name,
-		weatherCondition,
-		weatherDesc,
-		weatherData.Main.Temp,
-		weatherData.Main.Humidity,
-	)
-
-	return Result{
-		Status:  "success",
-		Message: message,
-		Data: map[string]interface{}{
-			"city":        weatherData.Name,
-			"condition":   weatherCondition,
-			"description": weatherDesc,
-			"temperature": weatherData.Main.Temp,
-			"humidity":    weatherData.Main.Humidity,
-		},
-	}
+	return NewSuccessResult(fmt.Sprintf("Weather in %s: %s, %.1f°C", city, description, weather.Main.Temp), map[string]interface{}{
+		"city":        city,
+		"temperature": weather.Main.Temp,
+		"humidity":    weather.Main.Humidity,
+		"description": description,
+	}, start)
 }
-

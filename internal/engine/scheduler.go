@@ -11,8 +11,9 @@ import (
 )
 
 // Scheduler handles scheduled workflow execution with tenant-aware rate limiting
+// PRODUCTION: Uses Store interface for testability
 type Scheduler struct {
-	db       *db.Database
+	store    db.Store // Interface, not concrete type!
 	executor *Executor
 	ticker   *time.Ticker
 	done     chan bool
@@ -22,9 +23,9 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new scheduler
-func NewScheduler(database *db.Database, executor *Executor, log *logger.Logger) *Scheduler {
+func NewScheduler(store db.Store, executor *Executor, log *logger.Logger) *Scheduler {
 	return &Scheduler{
-		db:       database,
+		store:    store,
 		executor: executor,
 		done:     make(chan bool),
 		log:      log,
@@ -60,8 +61,18 @@ func (s *Scheduler) Stop() {
 }
 
 // checkAndExecute checks for scheduled workflows that need to run
+// PRODUCTION: Uses panic recovery to prevent one bad workflow from crashing scheduler
 func (s *Scheduler) checkAndExecute() {
-	workflows, err := s.db.GetActiveScheduledWorkflows()
+	// PRODUCTION FIX: Recover from panics to keep scheduler running
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("Scheduler panic recovered", map[string]interface{}{
+				"panic": r,
+			})
+		}
+	}()
+
+	workflows, err := s.store.GetActiveScheduledWorkflows()
 	if err != nil {
 		s.log.Error("Failed to fetch scheduled workflows", map[string]interface{}{
 			"error": err.Error(),
@@ -73,16 +84,46 @@ func (s *Scheduler) checkAndExecute() {
 	executedCount := 0
 
 	for _, workflow := range workflows {
-		// Parse config to get interval
-		var config models.WorkflowConfig
-		if err := json.Unmarshal([]byte(workflow.ConfigJSON), &config); err != nil {
-			s.log.Error("Failed to parse workflow config", map[string]interface{}{
-				"workflow_id": workflow.ID,
-				"user_id":     workflow.UserID,
-				"error":       err.Error(),
-			})
-			continue
-		}
+		// PRODUCTION FIX: Wrap each workflow execution in its own recovery
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					s.log.Error("Workflow execution panic", map[string]interface{}{
+						"workflow_id": workflow.ID,
+						"user_id":     workflow.UserID,
+						"panic":       r,
+					})
+				}
+			}()
+
+			// PRODUCTION FIX: Re-check is_active before execution
+			// (user might have disabled it milliseconds ago)
+			currentWorkflow, err := s.store.GetWorkflowByID(workflow.ID)
+			if err != nil {
+				s.log.Warn("Workflow not found during execution check", map[string]interface{}{
+					"workflow_id": workflow.ID,
+					"error":       err.Error(),
+				})
+				return
+			}
+
+			if !currentWorkflow.IsActive {
+				s.log.Debug("Workflow disabled before execution", map[string]interface{}{
+					"workflow_id": workflow.ID,
+				})
+				return
+			}
+
+			// Parse config to get interval
+			var config models.WorkflowConfig
+			if err := json.Unmarshal([]byte(workflow.ConfigJSON), &config); err != nil {
+				s.log.Error("Failed to parse workflow config", map[string]interface{}{
+					"workflow_id": workflow.ID,
+					"user_id":     workflow.UserID,
+					"error":       err.Error(),
+				})
+				return
+			}
 
 		// Default interval is 10 minutes if not specified
 		interval := config.Interval
@@ -107,20 +148,21 @@ func (s *Scheduler) checkAndExecute() {
 			}
 		}
 
-		if shouldExecute {
-			s.log.InfoWithContext(
-				"Triggering scheduled workflow",
-				workflow.UserID,
-				"tenant_"+workflow.UserID, // Phase 1: user is tenant
-				map[string]interface{}{
-					"workflow_id":   workflow.ID,
-					"workflow_name": workflow.Name,
-					"interval":      interval,
-				},
-			)
-			s.executor.ExecuteWorkflow(workflow)
-			executedCount++
-		}
+			if shouldExecute {
+				s.log.InfoWithContext(
+					"Triggering scheduled workflow",
+					workflow.UserID,
+					"tenant_"+workflow.UserID, // Phase 1: user is tenant
+					map[string]interface{}{
+						"workflow_id":   workflow.ID,
+						"workflow_name": workflow.Name,
+						"interval":      interval,
+					},
+				)
+				s.executor.ExecuteWorkflow(*currentWorkflow)
+				executedCount++
+			}
+		}() // End of panic-recovery wrapper
 	}
 
 	if executedCount > 0 {

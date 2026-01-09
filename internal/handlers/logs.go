@@ -8,12 +8,15 @@ import (
 	"github.com/alexmacdonald/simple-ipass/internal/middleware"
 )
 
+// LogsHandler handles log retrieval HTTP requests
+// PRODUCTION: Uses Store interface for testability
 type LogsHandler struct {
-	db *db.Database
+	store db.Store // Interface, not concrete type!
 }
 
-func NewLogsHandler(database *db.Database) *LogsHandler {
-	return &LogsHandler{db: database}
+// NewLogsHandler creates a new logs handler
+func NewLogsHandler(store db.Store) *LogsHandler {
+	return &LogsHandler{store: store}
 }
 
 // GetLogs retrieves logs for the user's workflows
@@ -30,7 +33,7 @@ func (h *LogsHandler) GetLogs(w http.ResponseWriter, r *http.Request) {
 
 	if workflowID != "" {
 		// Verify ownership of workflow
-		workflow, err := h.db.GetWorkflowByID(workflowID)
+		workflow, err := h.store.GetWorkflowByID(workflowID)
 		if err != nil {
 			http.Error(w, "Workflow not found", http.StatusNotFound)
 			return
@@ -42,7 +45,7 @@ func (h *LogsHandler) GetLogs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Get logs for this workflow
-		logs, err := h.db.GetLogsByWorkflowID(workflowID)
+		logs, err := h.store.GetLogsByWorkflowID(workflowID)
 		if err != nil {
 			http.Error(w, "Failed to fetch logs", http.StatusInternalServerError)
 			return
@@ -54,7 +57,7 @@ func (h *LogsHandler) GetLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all logs for user's workflows
-	logs, err := h.db.GetLogsByUserID(userID)
+	logs, err := h.store.GetLogsByUserID(userID)
 	if err != nil {
 		http.Error(w, "Failed to fetch logs", http.StatusInternalServerError)
 		return
