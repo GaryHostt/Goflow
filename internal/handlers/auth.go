@@ -44,7 +44,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user already exists
-	_, err := h.db.GetUserByEmail(req.Email)
+	_, err := h.store.GetUserByEmail(req.Email)
 	if err == nil {
 		http.Error(w, "User already exists", http.StatusConflict)
 		return

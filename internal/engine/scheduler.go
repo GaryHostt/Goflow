@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/alexmacdonald/simple-ipass/internal/db"

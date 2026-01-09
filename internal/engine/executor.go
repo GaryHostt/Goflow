@@ -10,14 +10,16 @@ import (
 	"github.com/alexmacdonald/simple-ipass/internal/engine/connectors"
 	"github.com/alexmacdonald/simple-ipass/internal/logger"
 	"github.com/alexmacdonald/simple-ipass/internal/models"
+	"github.com/alexmacdonald/simple-ipass/internal/utils"
 )
 
 // Executor handles workflow execution with structured logging
 // Uses dependency injection (Store interface) for testability
 type Executor struct {
-	store db.Store // Interface, not concrete type!
-	log   *logger.Logger
-	pool  *WorkerPool // Bounded concurrency
+	store          db.Store // Interface, not concrete type!
+	log            *logger.Logger
+	pool           *WorkerPool       // Bounded concurrency
+	templateEngine *utils.TemplateEngine // Dynamic field mapping
 }
 
 // NewExecutor creates a new executor
@@ -27,9 +29,10 @@ func NewExecutor(store db.Store, log *logger.Logger) *Executor {
 	pool.Start()
 
 	return &Executor{
-		store: store,
-		log:   log,
-		pool:  pool,
+		store:          store,
+		log:            log,
+		pool:           pool,
+		templateEngine: utils.NewTemplateEngine(),
 	}
 }
 
@@ -194,9 +197,17 @@ func (e *Executor) executeWorkflowInternal(ctx context.Context, workflow models.
 
 	switch workflow.ActionType {
 	case "slack_message":
-		result = e.executeSlackAction(ctx, userID, tenantID, config)
+		result = e.executeSlackAction(ctx, userID, tenantID, config, workflow.TriggerPayload)
 	case "discord_post":
-		result = e.executeDiscordAction(ctx, userID, tenantID, config)
+		result = e.executeDiscordAction(ctx, userID, tenantID, config, workflow.TriggerPayload)
+	case "twilio_sms":
+		result = e.executeTwilioAction(ctx, userID, tenantID, config, workflow.TriggerPayload)
+	case "news_fetch":
+		result = e.executeNewsAPIAction(ctx, userID, tenantID, config)
+	case "cat_fetch":
+		result = e.executeCatAPIAction(ctx, userID, tenantID, config)
+	case "fakestore_fetch":
+		result = e.executeFakeStoreAction(ctx, userID, tenantID, config)
 	case "weather_check":
 		result = e.executeWeatherAction(ctx, userID, tenantID, config)
 	default:
@@ -216,8 +227,8 @@ func (e *Executor) executeWorkflowInternal(ctx context.Context, workflow models.
 	return result
 }
 
-// executeSlackAction sends a message to Slack with context awareness
-func (e *Executor) executeSlackAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+// executeSlackAction sends a message to Slack with context awareness and dynamic templates
+func (e *Executor) executeSlackAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig, triggerPayload string) connectors.Result {
 	// Check context before fetching credentials
 	select {
 	case <-ctx.Done():
@@ -250,7 +261,12 @@ func (e *Executor) executeSlackAction(ctx context.Context, userID, tenantID stri
 
 	message := config.SlackMessage
 	if message == "" {
-		message = "Hello from iPaaS! 🚀"
+		message = "Hello from GoFlow! 🚀"
+	}
+
+	// Apply dynamic template mapping if trigger payload exists
+	if triggerPayload != "" {
+		message = e.templateEngine.Render(message, triggerPayload)
 	}
 
 	// Execute with context (connector should respect cancellation)
@@ -331,6 +347,166 @@ func (e *Executor) executeWeatherAction(ctx context.Context, userID, tenantID st
 	}
 
 	return weather.FetchWeather(city)
+}
+
+// executeTwilioAction sends an SMS via Twilio with dynamic templates
+func (e *Executor) executeTwilioAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig, triggerPayload string) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	// Get Twilio credentials
+	cred, err := e.store.GetCredentialByUserAndService(userID, "twilio")
+	if err != nil {
+		e.log.Error("Twilio credentials not found", map[string]interface{}{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+			"error":     err.Error(),
+		})
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Twilio not connected: %v", err),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	// Parse Twilio credentials from JSON
+	var twilioConfig struct {
+		AccountSID string `json:"account_sid"`
+		AuthToken  string `json:"auth_token"`
+		FromNumber string `json:"from_number"`
+	}
+	if err := json.Unmarshal([]byte(cred.DecryptedKey), &twilioConfig); err != nil {
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Invalid Twilio credentials format: %v", err),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	twilio := &connectors.TwilioSMS{
+		AccountSID: twilioConfig.AccountSID,
+		AuthToken:  twilioConfig.AuthToken,
+		FromNumber: twilioConfig.FromNumber,
+	}
+
+	// Prepare SMS config
+	smsConfig := connectors.TwilioConfig{
+		To:      config.TwilioTo,
+		Message: config.TwilioMessage,
+	}
+
+	// Apply dynamic template mapping
+	if triggerPayload != "" {
+		smsConfig.Message = e.templateEngine.Render(smsConfig.Message, triggerPayload)
+		smsConfig.To = e.templateEngine.Render(smsConfig.To, triggerPayload)
+	}
+
+	return twilio.ExecuteWithContext(ctx, smsConfig)
+}
+
+// executeNewsAPIAction fetches news articles
+func (e *Executor) executeNewsAPIAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	// Get News API credentials
+	cred, err := e.store.GetCredentialByUserAndService(userID, "newsapi")
+	if err != nil {
+		e.log.Error("News API credentials not found", map[string]interface{}{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+			"error":     err.Error(),
+		})
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("News API not connected: %v", err),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	newsAPI := &connectors.NewsAPI{
+		APIKey: cred.DecryptedKey,
+	}
+
+	newsConfig := connectors.NewsConfig{
+		Query:    config.NewsQuery,
+		Country:  config.NewsCountry,
+		Category: config.NewsCategory,
+		PageSize: config.NewsPageSize,
+	}
+
+	return newsAPI.ExecuteWithContext(ctx, newsConfig)
+}
+
+// executeCatAPIAction fetches cat images
+func (e *Executor) executeCatAPIAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	// Cat API key is optional, but we'll check for it
+	var apiKey string
+	cred, err := e.store.GetCredentialByUserAndService(userID, "catapi")
+	if err == nil {
+		apiKey = cred.DecryptedKey
+	}
+
+	catAPI := &connectors.CatAPI{
+		APIKey: apiKey,
+	}
+
+	catConfig := connectors.CatConfig{
+		Limit:     config.CatLimit,
+		HasBreeds: config.CatHasBreeds,
+		BreedID:   config.CatBreedID,
+		Category:  config.CatCategory,
+	}
+
+	return catAPI.ExecuteWithContext(ctx, catConfig)
+}
+
+// executeFakeStoreAction fetches data from Fake Store API
+func (e *Executor) executeFakeStoreAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	// Fake Store API doesn't require authentication
+	fakeStore := &connectors.FakeStoreAPI{}
+
+	storeConfig := connectors.FakeStoreConfig{
+		Endpoint: config.FakeStoreEndpoint,
+		Limit:    config.FakeStoreLimit,
+		Category: config.FakeStoreCategory,
+	}
+
+	return fakeStore.ExecuteWithContext(ctx, storeConfig)
 }
 
 // Shutdown gracefully stops the executor

@@ -205,7 +205,7 @@ func (h *WorkflowsHandler) ToggleWorkflow(w http.ResponseWriter, r *http.Request
 
 	// Toggle active status
 	newStatus := !workflow.IsActive
-	if err := h.db.UpdateWorkflowActive(workflowID, newStatus); err != nil {
+	if err := h.store.UpdateWorkflowActive(workflowID, newStatus); err != nil {
 		http.Error(w, "Failed to update workflow", http.StatusInternalServerError)
 		return
 	}

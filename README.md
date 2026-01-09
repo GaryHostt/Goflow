@@ -18,11 +18,28 @@ See [PRODUCTION_QUALITY.md](PRODUCTION_QUALITY.md) for detailed architecture ana
 
 ## Features
 
+### 🎉 NEW in v0.4.0: Enhanced Connectors & Dynamic Templates
+
+- ✅ **4 New Connectors** - Twilio SMS, News API, The Cat API, Fake Store API
+- ✅ **Dynamic Field Mapping** - Use `{{user.name}}` or `{{order.id}}` in messages
+- ✅ **Template Engine** - Automatically map webhook data to action fields
+- ✅ **Real-World Use Cases** - E-commerce notifications, news aggregation, SMS alerts
+
+**Example:**
+```
+Webhook Payload: {"user": {"name": "Alex"}, "order": {"id": "12345"}}
+Slack Message: "Hello {{user.name}}! Order #{{order.id}} confirmed."
+Result: "Hello Alex! Order #12345 confirmed."
+```
+
+See **[NEW_CONNECTORS.md](NEW_CONNECTORS.md)** for complete documentation!
+
 ### Core Functionality
 - ✅ **User Authentication** - JWT-based auth with register/login
 - ✅ **Workflow Management** - Create, enable/disable, delete workflows
 - ✅ **Multiple Triggers** - Webhook and scheduled (polling) triggers
-- ✅ **Third-Party Connectors** - Slack, Discord, OpenWeather API
+- ✅ **Third-Party Connectors** - **7 connectors:** Slack, Discord, Twilio SMS, News API, The Cat API, Fake Store API, OpenWeather 🆕
+- ✅ **Dynamic Field Mapping** - Use `{{field.path}}` templates in messages 🆕
 - ✅ **Execution Logs** - Track all workflow executions with filtering
 - ✅ **Encrypted Credentials** - AES-256 encryption for API keys
 - ✅ **Background Scheduler** - Goroutine-based polling for scheduled tasks

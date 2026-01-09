@@ -22,15 +22,16 @@ type Credential struct {
 
 // Workflow represents an integration workflow
 type Workflow struct {
-	ID              string    `json:"id"`
-	UserID          string    `json:"user_id"`
-	Name            string    `json:"name"`
-	TriggerType     string    `json:"trigger_type"` // 'webhook', 'schedule'
-	ActionType      string    `json:"action_type"`  // 'slack_message', 'discord_post', 'weather_check'
-	ConfigJSON      string    `json:"config_json"`
-	IsActive        bool      `json:"is_active"`
+	ID              string     `json:"id"`
+	UserID          string     `json:"user_id"`
+	Name            string     `json:"name"`
+	TriggerType     string     `json:"trigger_type"` // 'webhook', 'schedule'
+	ActionType      string     `json:"action_type"`  // 'slack_message', 'discord_post', 'twilio_sms', 'news_fetch', 'cat_fetch', 'fakestore_fetch', 'weather_check'
+	ConfigJSON      string     `json:"config_json"`
+	TriggerPayload  string     `json:"trigger_payload,omitempty"` // JSON payload from webhook trigger for template mapping
+	IsActive        bool       `json:"is_active"`
 	LastExecutedAt  *time.Time `json:"last_executed_at,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 // Log represents an execution log entry
@@ -74,11 +75,32 @@ type WorkflowConfig struct {
 	// For schedule triggers
 	Interval int `json:"interval,omitempty"` // in minutes
 	
-	// For Slack action
+	// For Slack action (supports templates like "Hello {{user.name}}")
 	SlackMessage string `json:"slack_message,omitempty"`
 	
-	// For Discord action
+	// For Discord action (supports templates like "Order {{order.id}} placed!")
 	DiscordMessage string `json:"discord_message,omitempty"`
+	
+	// For Twilio SMS action
+	TwilioTo      string `json:"twilio_to,omitempty"`      // Recipient phone number (supports templates like "{{user.phone}}")
+	TwilioMessage string `json:"twilio_message,omitempty"` // SMS message (supports templates)
+	
+	// For News API action
+	NewsQuery    string `json:"news_query,omitempty"`     // Search query (e.g., "bitcoin")
+	NewsCountry  string `json:"news_country,omitempty"`   // Country code (e.g., "us")
+	NewsCategory string `json:"news_category,omitempty"`  // Category (e.g., "technology")
+	NewsPageSize int    `json:"news_page_size,omitempty"` // Number of articles (default: 10)
+	
+	// For Cat API action
+	CatLimit     int    `json:"cat_limit,omitempty"`      // Number of cat images (default: 1)
+	CatHasBreeds bool   `json:"cat_has_breeds,omitempty"` // Filter to cats with breed info
+	CatBreedID   string `json:"cat_breed_id,omitempty"`   // Specific breed (e.g., "beng")
+	CatCategory  string `json:"cat_category,omitempty"`   // Category (e.g., "boxes", "hats")
+	
+	// For Fake Store API action
+	FakeStoreEndpoint string `json:"fakestore_endpoint,omitempty"` // "products", "users", "carts"
+	FakeStoreLimit    int    `json:"fakestore_limit,omitempty"`    // Number of items
+	FakeStoreCategory string `json:"fakestore_category,omitempty"` // Product category
 	
 	// For Weather check
 	City string `json:"city,omitempty"`
