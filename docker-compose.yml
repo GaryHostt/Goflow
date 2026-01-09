@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (production-ready alternative to SQLite)
+  postgres:
+    image: postgres:16-alpine
+    container_name: ipaas-postgres
+    environment:
+      POSTGRES_DB: ipaas
+      POSTGRES_USER: ipaas
+      POSTGRES_PASSWORD: ipaas_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ipaas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Go Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ipaas-backend
+    environment:
+      - DATABASE_URL=postgres://ipaas:ipaas_password@postgres:5432/ipaas?sslmode=disable
+      - JWT_SECRET=change-this-in-production-use-env-var
+      - ENCRYPTION_KEY=change-this-32-byte-key-in-prod
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ipaas-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Elasticsearch for advanced logging (optional - for A+ showcase)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: ipaas-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana for log visualization (optional - for A+ showcase)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: ipaas-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  es_data:
+
+networks:
+  default:
+    name: ipaas-network
+

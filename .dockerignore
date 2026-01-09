@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Binaries
+bin/
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Dependencies (will be installed in container)
+node_modules/
+frontend/node_modules/
+
+# Build artifacts
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Documentation (not needed in image)
+*.md
+!README.md
+
+# Scripts (not needed in runtime)
+scripts/
+
+# Development files
+.env.local
+.env.development
+

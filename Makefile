@@ -49,8 +49,46 @@ start: ## Start both backend and frontend (requires two terminals)
 	@echo "Use './start.sh' to start both services in one terminal"
 	@echo "Or run 'make dev' in one terminal and 'make frontend' in another"
 
-docker-build: ## Build Docker image (TODO: create Dockerfile)
-	@echo "Docker support coming soon!"
+docker-up: ## Start all services with Docker Compose (PostgreSQL, Backend, Frontend, ELK)
+	@echo "Starting iPaaS platform with Docker Compose..."
+	docker-compose up -d
+	@echo "✅ Platform is running!"
+	@echo "Frontend: http://localhost:3000"
+	@echo "Backend API: http://localhost:8080"
+	@echo "Kibana (logs): http://localhost:5601"
+
+docker-down: ## Stop all Docker services
+	@echo "Stopping Docker services..."
+	docker-compose down
+
+docker-logs: ## View Docker logs
+	docker-compose logs -f
+
+docker-build: ## Build Docker images
+	@echo "Building Docker images..."
+	docker-compose build
+
+docker-clean: ## Remove Docker containers, volumes, and images
+	@echo "Cleaning Docker resources..."
+	docker-compose down -v
+	docker system prune -f
+
+test: ## Run E2E tests
+	@echo "Running end-to-end tests..."
+	go test ./scripts/e2e_test.go -v
+
+test-elk: ## Run E2E tests with ELK validation
+	@echo "Running E2E tests with Elasticsearch validation..."
+	ELASTICSEARCH_URL=http://localhost:9200 go test ./scripts/e2e_test.go -v
+
+test-coverage: ## Run tests with coverage report
+	@echo "Running tests with coverage..."
+	go test ./scripts/e2e_test.go -v -cover
+
+test-clean: ## Clean up test databases
+	@echo "Cleaning test databases..."
+	rm -f ipaas_test.db test_*.db
+	@echo "✅ Test databases cleaned!"
 
 .DEFAULT_GOAL := help
 
