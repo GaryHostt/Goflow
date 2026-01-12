@@ -33,9 +33,9 @@ export const isAuthenticated = (): boolean => {
 async function apiClient(endpoint: string, options: RequestInit = {}) {
   const token = getToken();
   
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
+    ...(options.headers as Record<string, string> || {}),
   };
 
   if (token) {
@@ -64,7 +64,14 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    return response.json();
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || data.message || 'Registration failed');
+    }
+    
+    return data;
   },
   
   login: async (email: string, password: string) => {
@@ -72,7 +79,21 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    return response.json();
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      // Handle specific error messages from backend
+      if (response.status === 401) {
+        throw new Error('Invalid email or password');
+      }
+      if (response.status === 404 || data.error?.includes('not found')) {
+        throw new Error('No account found with this email. Please register first.');
+      }
+      throw new Error(data.error || data.message || 'Login failed');
+    }
+    
+    return data;
   },
 };
 
@@ -132,6 +153,39 @@ export const logs = {
   list: async (workflowId?: string) => {
     const endpoint = workflowId ? `/logs?workflow_id=${workflowId}` : '/logs';
     const response = await apiClient(endpoint);
+    return response.json();
+  },
+};
+
+// General API client for custom endpoints
+export const api = {
+  get: async (endpoint: string) => {
+    const response = await apiClient(endpoint, {
+      method: 'GET',
+    });
+    return response.json();
+  },
+  
+  post: async (endpoint: string, data?: any) => {
+    const response = await apiClient(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+    return response.json();
+  },
+  
+  put: async (endpoint: string, data?: any) => {
+    const response = await apiClient(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+    return response.json();
+  },
+  
+  delete: async (endpoint: string) => {
+    const response = await apiClient(endpoint, {
+      method: 'DELETE',
+    });
     return response.json();
   },
 };

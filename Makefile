@@ -102,5 +102,20 @@ test-clean: ## Clean up test databases
 
 test-all: test test-integration test-coverage ## Run all tests with coverage
 
+test-connectors: ## Run comprehensive connector validation tests
+	@echo "Running connector validation tests..."
+	go run scripts/connector_test.go
+
+test-kong: ## Run Kong Gateway integration tests
+	@echo "Running Kong Gateway integration tests..."
+	@echo "⚠️  Make sure Kong is running: make docker-up"
+	go run scripts/kong_test.go
+
+test-full: test test-connectors test-kong ## Run all tests including connectors and Kong
+
+configure-kong-elk: ## Configure Kong to ship logs to ELK
+	@echo "Configuring Kong to send logs to Elasticsearch..."
+	./scripts/configure_kong_elk.sh
+
 .DEFAULT_GOAL := help
 

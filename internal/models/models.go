@@ -22,16 +22,25 @@ type Credential struct {
 
 // Workflow represents an integration workflow
 type Workflow struct {
-	ID              string     `json:"id"`
-	UserID          string     `json:"user_id"`
-	Name            string     `json:"name"`
-	TriggerType     string     `json:"trigger_type"` // 'webhook', 'schedule'
-	ActionType      string     `json:"action_type"`  // 'slack_message', 'discord_post', 'twilio_sms', 'news_fetch', 'cat_fetch', 'fakestore_fetch', 'weather_check'
-	ConfigJSON      string     `json:"config_json"`
-	TriggerPayload  string     `json:"trigger_payload,omitempty"` // JSON payload from webhook trigger for template mapping
-	IsActive        bool       `json:"is_active"`
-	LastExecutedAt  *time.Time `json:"last_executed_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	ID              string         `json:"id"`
+	UserID          string         `json:"user_id"`
+	Name            string         `json:"name"`
+	TriggerType     string         `json:"trigger_type"`     // 'webhook', 'schedule'
+	ActionType      string         `json:"action_type"`      // Primary action: 'slack_message', 'discord_post', 'weather_check', etc.
+	ConfigJSON      string         `json:"config_json"`      // Primary action configuration
+	ActionChain     string         `json:"action_chain"`     // JSON array of additional actions to execute sequentially
+	ParsedChain     []ChainedAction `json:"parsed_chain,omitempty"` // Parsed action chain (not stored in DB)
+	TriggerPayload  string         `json:"trigger_payload,omitempty"` // JSON payload from webhook trigger for template mapping
+	IsActive        bool           `json:"is_active"`
+	LastExecutedAt  *time.Time     `json:"last_executed_at,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+}
+
+// ChainedAction represents an additional action in a workflow chain
+type ChainedAction struct {
+	ActionType string                 `json:"action_type"` // 'slack_message', 'discord_post', 'twilio_sms', etc.
+	Config     map[string]interface{} `json:"config"`      // Action-specific configuration
+	UseDataFrom string                 `json:"use_data_from,omitempty"` // 'previous' to use data from previous action
 }
 
 // Log represents an execution log entry
@@ -51,14 +60,14 @@ type WorkflowLog struct {
 
 // LoginRequest represents login credentials
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
 }
 
 // RegisterRequest represents registration data
 type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6,max=128"`
 }
 
 // AuthResponse represents the JWT token response
@@ -104,6 +113,27 @@ type WorkflowConfig struct {
 	
 	// For Weather check
 	City string `json:"city,omitempty"`
+	
+	// For SOAP connector (Legacy protocol bridge)
+	SOAPEndpoint   string                 `json:"soap_endpoint,omitempty"`   // SOAP service URL
+	SOAPAction     string                 `json:"soap_action,omitempty"`     // SOAPAction header (optional)
+	SOAPMethod     string                 `json:"soap_method,omitempty"`     // SOAP method name
+	SOAPNamespace  string                 `json:"soap_namespace,omitempty"`  // XML namespace
+	SOAPParameters map[string]interface{} `json:"soap_parameters,omitempty"` // Method parameters
+	SOAPHeaders    map[string]string      `json:"soap_headers,omitempty"`    // Custom HTTP headers
+	
+	// For SWAPI connector (Star Wars API)
+	SWAPIResource string `json:"swapi_resource,omitempty"` // films, people, planets, species, vehicles, starships
+	SWAPIID       string `json:"swapi_id,omitempty"`       // Resource ID (e.g., "1" for first film)
+	SWAPISearch   string `json:"swapi_search,omitempty"`   // Search query
+	
+	// For Salesforce connector
+	SalesforceOperation  string                 `json:"salesforce_operation,omitempty"`   // query, create, get, update, delete
+	SalesforceObject     string                 `json:"salesforce_object,omitempty"`      // Account, Contact, Lead, etc.
+	SalesforceRecordID   string                 `json:"salesforce_record_id,omitempty"`   // Record ID for get/update/delete
+	SalesforceQuery      string                 `json:"salesforce_query,omitempty"`       // SOQL query
+	SalesforceData       map[string]interface{} `json:"salesforce_data,omitempty"`        // Data for create/update
+	SalesforceInstanceURL string                 `json:"salesforce_instance_url,omitempty"` // Override instance URL
 	
 	// General purpose field for custom data
 	CustomData map[string]interface{} `json:"custom_data,omitempty"`

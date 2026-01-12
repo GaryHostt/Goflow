@@ -9,6 +9,7 @@ import (
 	"github.com/alexmacdonald/simple-ipass/internal/db"
 	"github.com/alexmacdonald/simple-ipass/internal/middleware"
 	"github.com/alexmacdonald/simple-ipass/internal/models"
+	"github.com/alexmacdonald/simple-ipass/internal/utils"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -24,29 +25,26 @@ func NewAuthHandler(store db.Store) *AuthHandler {
 	return &AuthHandler{store: store}
 }
 
-// Register handles user registration
+// Register handles user registration with strict JSON validation
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	
+	// Use strict JSON decoding to prevent malformed requests
+	if err := utils.DecodeJSONStrict(w, r, &req); err != nil {
+		utils.WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Validate input
-	if req.Email == "" || req.Password == "" {
-		http.Error(w, "Email and password are required", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Password) < 6 {
-		http.Error(w, "Password must be at least 6 characters", http.StatusBadRequest)
+	// Validate input using go-playground/validator
+	if err := utils.ValidateStruct(&req); err != nil {
+		utils.WriteJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Check if user already exists
 	_, err := h.store.GetUserByEmail(req.Email)
 	if err == nil {
-		http.Error(w, "User already exists", http.StatusConflict)
+		utils.WriteJSONError(w, "User already exists", http.StatusConflict)
 		return
 	}
 

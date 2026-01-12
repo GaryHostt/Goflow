@@ -57,6 +57,12 @@ func (db *Database) Close() error {
 	return db.conn.Close()
 }
 
+// Ping verifies the database connection is alive and working
+// Returns an error if the database is not accessible
+func (db *Database) Ping() error {
+	return db.conn.Ping()
+}
+
 // --- User Repository ---
 
 // CreateUser creates a new user
@@ -170,7 +176,7 @@ func (db *Database) GetCredentialByUserAndService(userID, serviceName string) (*
 // --- Workflows Repository ---
 // TODO: MULTI-TENANT - Change user_id filter to tenant_id
 
-// CreateWorkflow creates a new workflow
+// CreateWorkflow creates a new workflow with optional action chain
 func (db *Database) CreateWorkflow(userID, name, triggerType, actionType, configJSON string) (*models.Workflow, error) {
 	workflow := &models.Workflow{
 		ID:          uuid.New().String(),
@@ -179,12 +185,36 @@ func (db *Database) CreateWorkflow(userID, name, triggerType, actionType, config
 		TriggerType: triggerType,
 		ActionType:  actionType,
 		ConfigJSON:  configJSON,
+		ActionChain: "", // Will be set separately if needed
 		IsActive:    true,
 		CreatedAt:   time.Now(),
 	}
 
-	query := `INSERT INTO workflows (id, user_id, name, trigger_type, action_type, config_json, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := db.conn.Exec(query, workflow.ID, workflow.UserID, workflow.Name, workflow.TriggerType, workflow.ActionType, workflow.ConfigJSON, workflow.IsActive, workflow.CreatedAt)
+	query := `INSERT INTO workflows (id, user_id, name, trigger_type, action_type, config_json, action_chain, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := db.conn.Exec(query, workflow.ID, workflow.UserID, workflow.Name, workflow.TriggerType, workflow.ActionType, workflow.ConfigJSON, workflow.ActionChain, workflow.IsActive, workflow.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return workflow, nil
+}
+
+// CreateWorkflowWithChain creates a new workflow with an action chain
+func (db *Database) CreateWorkflowWithChain(userID, name, triggerType, actionType, configJSON, actionChain string) (*models.Workflow, error) {
+	workflow := &models.Workflow{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Name:        name,
+		TriggerType: triggerType,
+		ActionType:  actionType,
+		ConfigJSON:  configJSON,
+		ActionChain: actionChain,
+		IsActive:    true,
+		CreatedAt:   time.Now(),
+	}
+
+	query := `INSERT INTO workflows (id, user_id, name, trigger_type, action_type, config_json, action_chain, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := db.conn.Exec(query, workflow.ID, workflow.UserID, workflow.Name, workflow.TriggerType, workflow.ActionType, workflow.ConfigJSON, workflow.ActionChain, workflow.IsActive, workflow.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +224,7 @@ func (db *Database) CreateWorkflow(userID, name, triggerType, actionType, config
 
 // GetWorkflowsByUserID retrieves all workflows for a user
 func (db *Database) GetWorkflowsByUserID(userID string) ([]models.Workflow, error) {
-	query := `SELECT id, user_id, name, trigger_type, action_type, config_json, is_active, last_executed_at, created_at FROM workflows WHERE user_id = ? ORDER BY created_at DESC`
+	query := `SELECT id, user_id, name, trigger_type, action_type, config_json, action_chain, is_active, last_executed_at, created_at FROM workflows WHERE user_id = ? ORDER BY created_at DESC`
 	rows, err := db.conn.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -205,12 +235,16 @@ func (db *Database) GetWorkflowsByUserID(userID string) ([]models.Workflow, erro
 	for rows.Next() {
 		var w models.Workflow
 		var lastExecutedAt sql.NullTime
-		err := rows.Scan(&w.ID, &w.UserID, &w.Name, &w.TriggerType, &w.ActionType, &w.ConfigJSON, &w.IsActive, &lastExecutedAt, &w.CreatedAt)
+		var actionChain sql.NullString
+		err := rows.Scan(&w.ID, &w.UserID, &w.Name, &w.TriggerType, &w.ActionType, &w.ConfigJSON, &actionChain, &w.IsActive, &lastExecutedAt, &w.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
 		if lastExecutedAt.Valid {
 			w.LastExecutedAt = &lastExecutedAt.Time
+		}
+		if actionChain.Valid {
+			w.ActionChain = actionChain.String
 		}
 		workflows = append(workflows, w)
 	}
@@ -222,13 +256,17 @@ func (db *Database) GetWorkflowsByUserID(userID string) ([]models.Workflow, erro
 func (db *Database) GetWorkflowByID(workflowID string) (*models.Workflow, error) {
 	w := &models.Workflow{}
 	var lastExecutedAt sql.NullTime
-	query := `SELECT id, user_id, name, trigger_type, action_type, config_json, is_active, last_executed_at, created_at FROM workflows WHERE id = ?`
-	err := db.conn.QueryRow(query, workflowID).Scan(&w.ID, &w.UserID, &w.Name, &w.TriggerType, &w.ActionType, &w.ConfigJSON, &w.IsActive, &lastExecutedAt, &w.CreatedAt)
+	var actionChain sql.NullString
+	query := `SELECT id, user_id, name, trigger_type, action_type, config_json, action_chain, is_active, last_executed_at, created_at FROM workflows WHERE id = ?`
+	err := db.conn.QueryRow(query, workflowID).Scan(&w.ID, &w.UserID, &w.Name, &w.TriggerType, &w.ActionType, &w.ConfigJSON, &actionChain, &w.IsActive, &lastExecutedAt, &w.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	if lastExecutedAt.Valid {
 		w.LastExecutedAt = &lastExecutedAt.Time
+	}
+	if actionChain.Valid {
+		w.ActionChain = actionChain.String
 	}
 	return w, nil
 }
@@ -256,7 +294,7 @@ func (db *Database) DeleteWorkflow(workflowID string) error {
 
 // GetActiveScheduledWorkflows retrieves all active scheduled workflows
 func (db *Database) GetActiveScheduledWorkflows() ([]models.Workflow, error) {
-	query := `SELECT id, user_id, name, trigger_type, action_type, config_json, is_active, last_executed_at, created_at 
+	query := `SELECT id, user_id, name, trigger_type, action_type, config_json, action_chain, is_active, last_executed_at, created_at 
 	          FROM workflows WHERE trigger_type = 'schedule' AND is_active = 1`
 	rows, err := db.conn.Query(query)
 	if err != nil {
@@ -268,12 +306,16 @@ func (db *Database) GetActiveScheduledWorkflows() ([]models.Workflow, error) {
 	for rows.Next() {
 		var w models.Workflow
 		var lastExecutedAt sql.NullTime
-		err := rows.Scan(&w.ID, &w.UserID, &w.Name, &w.TriggerType, &w.ActionType, &w.ConfigJSON, &w.IsActive, &lastExecutedAt, &w.CreatedAt)
+		var actionChain sql.NullString
+		err := rows.Scan(&w.ID, &w.UserID, &w.Name, &w.TriggerType, &w.ActionType, &w.ConfigJSON, &actionChain, &w.IsActive, &lastExecutedAt, &w.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
 		if lastExecutedAt.Valid {
 			w.LastExecutedAt = &lastExecutedAt.Time
+		}
+		if actionChain.Valid {
+			w.ActionChain = actionChain.String
 		}
 		workflows = append(workflows, w)
 	}

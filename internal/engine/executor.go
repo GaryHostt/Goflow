@@ -210,6 +210,12 @@ func (e *Executor) executeWorkflowInternal(ctx context.Context, workflow models.
 		result = e.executeFakeStoreAction(ctx, userID, tenantID, config)
 	case "weather_check":
 		result = e.executeWeatherAction(ctx, userID, tenantID, config)
+	case "soap_call":
+		result = e.executeSOAPAction(ctx, userID, tenantID, config)
+	case "swapi_fetch":
+		result = e.executeSWAPIAction(ctx, userID, tenantID, config)
+	case "salesforce":
+		result = e.executeSalesforceAction(ctx, userID, tenantID, config)
 	default:
 		result = connectors.Result{
 			Status:    "failed",
@@ -224,8 +230,134 @@ func (e *Executor) executeWorkflowInternal(ctx context.Context, workflow models.
 		result.Duration = time.Since(start).String()
 	}
 
+	// Execute action chain if present
+	if workflow.ActionChain != "" {
+		chainResults := e.executeActionChain(ctx, workflow.ActionChain, userID, tenantID, result)
+		
+		// Append chain results to primary result
+		if result.Data == nil {
+			result.Data = make(map[string]interface{})
+		}
+		result.Data["chain_results"] = chainResults
+		result.Data["chain_count"] = len(chainResults)
+		
+		// Update message to reflect chain execution
+		successCount := 0
+		for _, chainResult := range chainResults {
+			if chainResult.Status == "success" {
+				successCount++
+			}
+		}
+		result.Message = fmt.Sprintf("%s | Chain: %d/%d actions succeeded", result.Message, successCount, len(chainResults))
+	}
+
 	return result
 }
+
+// executeActionChain executes a sequence of chained actions
+func (e *Executor) executeActionChain(ctx context.Context, actionChainJSON, userID, tenantID string, previousResult connectors.Result) []connectors.Result {
+	// Parse action chain
+	var chainedActions []models.ChainedAction
+	if err := json.Unmarshal([]byte(actionChainJSON), &chainedActions); err != nil {
+		return []connectors.Result{{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Failed to parse action chain: %v", err),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}}
+	}
+
+	results := make([]connectors.Result, 0, len(chainedActions))
+	currentData := previousResult.Data
+
+	for i, chainedAction := range chainedActions {
+		// Check context before each chained action
+		select {
+		case <-ctx.Done():
+			results = append(results, connectors.Result{
+				Status:    "cancelled",
+				Message:   fmt.Sprintf("Chain action %d cancelled: %v", i+1, ctx.Err()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			})
+			return results
+		default:
+		}
+
+		e.log.Info("Executing chained action", map[string]interface{}{
+			"action_type": chainedAction.ActionType,
+			"chain_step":  i + 1,
+			"total_steps": len(chainedActions),
+			"user_id":     userID,
+			"tenant_id":   tenantID,
+		})
+
+		// Prepare config for chained action
+		config := models.WorkflowConfig{}
+		
+		// Copy config from chained action
+		configBytes, _ := json.Marshal(chainedAction.Config)
+		json.Unmarshal(configBytes, &config)
+
+		// If "use_data_from" is "previous", inject previous result data
+		if chainedAction.UseDataFrom == "previous" && currentData != nil {
+			// Format data for template engine or direct use
+			if dataJSON, err := json.Marshal(currentData); err == nil {
+				// Use as trigger payload for template mapping
+				result := e.executeChainedActionWithData(ctx, chainedAction.ActionType, userID, tenantID, config, string(dataJSON))
+				results = append(results, result)
+				if result.Data != nil {
+					currentData = result.Data
+				}
+				continue
+			}
+		}
+
+		// Execute normal chained action
+		result := e.executeChainedAction(ctx, chainedAction.ActionType, userID, tenantID, config)
+		results = append(results, result)
+		if result.Data != nil {
+			currentData = result.Data
+		}
+	}
+
+	return results
+}
+
+// executeChainedAction executes a single action in the chain
+func (e *Executor) executeChainedAction(ctx context.Context, actionType, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	switch actionType {
+	case "slack_message":
+		return e.executeSlackAction(ctx, userID, tenantID, config, "")
+	case "discord_post":
+		return e.executeDiscordAction(ctx, userID, tenantID, config, "")
+	case "twilio_sms":
+		return e.executeTwilioAction(ctx, userID, tenantID, config, "")
+	default:
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Unsupported chained action type: %s", actionType),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+}
+
+// executeChainedActionWithData executes a chained action with data from previous action
+func (e *Executor) executeChainedActionWithData(ctx context.Context, actionType, userID, tenantID string, config models.WorkflowConfig, previousData string) connectors.Result {
+	switch actionType {
+	case "slack_message":
+		return e.executeSlackAction(ctx, userID, tenantID, config, previousData)
+	case "discord_post":
+		return e.executeDiscordAction(ctx, userID, tenantID, config, previousData)
+	case "twilio_sms":
+		return e.executeTwilioAction(ctx, userID, tenantID, config, previousData)
+	default:
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Unsupported chained action type: %s", actionType),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+}
+
 
 // executeSlackAction sends a message to Slack with context awareness and dynamic templates
 func (e *Executor) executeSlackAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig, triggerPayload string) connectors.Result {
@@ -274,7 +406,7 @@ func (e *Executor) executeSlackAction(ctx context.Context, userID, tenantID stri
 }
 
 // executeDiscordAction sends a message to Discord
-func (e *Executor) executeDiscordAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+func (e *Executor) executeDiscordAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig, triggerPayload string) connectors.Result {
 	select {
 	case <-ctx.Done():
 		return connectors.Result{
@@ -507,6 +639,125 @@ func (e *Executor) executeFakeStoreAction(ctx context.Context, userID, tenantID 
 	}
 
 	return fakeStore.ExecuteWithContext(ctx, storeConfig)
+}
+
+// executeSOAPAction converts REST to SOAP and calls legacy services
+func (e *Executor) executeSOAPAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	soapConnector := &connectors.SOAPConnector{
+		SOAPEndpoint: config.SOAPEndpoint,
+		SOAPAction:   config.SOAPAction,
+	}
+
+	soapConfig := connectors.SOAPConfig{
+		Endpoint:   config.SOAPEndpoint,
+		Action:     config.SOAPAction,
+		Method:     config.SOAPMethod,
+		Namespace:  config.SOAPNamespace,
+		Parameters: config.SOAPParameters,
+		Headers:    config.SOAPHeaders,
+	}
+
+	return soapConnector.ExecuteWithContext(ctx, soapConfig)
+}
+
+// executeSWAPIAction fetches Star Wars data from SWAPI
+func (e *Executor) executeSWAPIAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	swapiConnector := &connectors.SWAPIConnector{}
+
+	swapiConfig := connectors.SWAPIConfig{
+		Resource: config.SWAPIResource,
+		ID:       config.SWAPIID,
+		Search:   config.SWAPISearch,
+	}
+
+	return swapiConnector.ExecuteWithContext(ctx, swapiConfig)
+}
+
+// executeSalesforceAction performs Salesforce operations
+func (e *Executor) executeSalesforceAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig) connectors.Result {
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	// Get Salesforce credentials
+	cred, err := e.store.GetCredentialByUserAndService(userID, "salesforce")
+	if err != nil {
+		e.log.Error("Salesforce credentials not found", map[string]interface{}{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+			"error":     err.Error(),
+		})
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Salesforce not connected: %v", err),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	// DecryptedKey should contain JSON with instance_url and access_token
+	// Format: {"instance_url": "https://...", "access_token": "..."}
+	var sfCreds map[string]string
+	if err := json.Unmarshal([]byte(cred.DecryptedKey), &sfCreds); err != nil {
+		e.log.Error("Failed to parse Salesforce credentials", map[string]interface{}{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+			"error":     err.Error(),
+		})
+		return connectors.Result{
+			Status:    "failed",
+			Message:   "Invalid Salesforce credentials format",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	salesforceConnector := &connectors.SalesforceConnector{
+		InstanceURL: sfCreds["instance_url"],
+		AccessToken: sfCreds["access_token"],
+	}
+
+	// Override with config if provided
+	instanceURL := config.SalesforceInstanceURL
+	if instanceURL == "" {
+		instanceURL = sfCreds["instance_url"]
+	}
+
+	salesforceConfig := connectors.SalesforceConfig{
+		Operation:   config.SalesforceOperation,
+		Object:      config.SalesforceObject,
+		RecordID:    config.SalesforceRecordID,
+		Query:       config.SalesforceQuery,
+		Data:        config.SalesforceData,
+		InstanceURL: instanceURL,
+		AccessToken: sfCreds["access_token"],
+	}
+
+	return salesforceConnector.ExecuteWithContext(ctx, salesforceConfig)
 }
 
 // Shutdown gracefully stops the executor

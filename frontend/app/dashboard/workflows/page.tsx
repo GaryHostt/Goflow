@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Loader2, AlertCircle, Inbox } from 'lucide-react'
 
 interface Workflow {
   id: string
@@ -20,13 +22,16 @@ interface Workflow {
 export default function WorkflowsPage() {
   const [workflowsList, setWorkflowsList] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>('')
 
   const loadWorkflows = async () => {
     try {
+      setError('')
       const data = await workflows.list()
       setWorkflowsList(data || [])
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load workflows', err)
+      setError(err.message || 'Failed to load workflows. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -40,8 +45,9 @@ export default function WorkflowsPage() {
     try {
       await workflows.toggle(id)
       await loadWorkflows()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to toggle workflow', err)
+      setError(err.message || 'Failed to toggle workflow')
     }
   }
 
@@ -51,8 +57,9 @@ export default function WorkflowsPage() {
     try {
       await workflows.delete(id)
       await loadWorkflows()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete workflow', err)
+      setError(err.message || 'Failed to delete workflow')
     }
   }
 
@@ -70,16 +77,31 @@ export default function WorkflowsPage() {
         </Link>
       </div>
 
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Your Workflows</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p>Loading...</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Loading workflows...</p>
+            </div>
           ) : workflowsList.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground mb-4">No workflows yet</p>
+            <div className="text-center py-12">
+              <Inbox className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No workflows yet</h3>
+              <p className="text-muted-foreground mb-6">
+                Get started by creating your first integration workflow
+              </p>
               <Link href="/dashboard/workflows/new">
                 <Button>Create Your First Workflow</Button>
               </Link>

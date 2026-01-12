@@ -8,6 +8,8 @@ import { auth, setToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { XCircle } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -36,14 +38,17 @@ export default function RegisterPage() {
     try {
       const response = await auth.register(email, password)
       
-      if (response.token) {
-        setToken(response.token)
+      if (response.token || response.data?.token) {
+        const token = response.token || response.data.token
+        setToken(token)
         router.push('/dashboard')
       } else {
         setError('Registration failed. Please try again.')
       }
-    } catch (err) {
-      setError('An error occurred. This email may already be registered.')
+    } catch (err: any) {
+      // Display specific error message
+      setError(err.message || 'An error occurred. This email may already be registered.')
+      console.error('Registration error:', err)
     } finally {
       setLoading(false)
     }
@@ -68,9 +73,11 @@ export default function RegisterPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-                {error}
-              </div>
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
             
             <div className="space-y-2">
@@ -84,6 +91,9 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
+                pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+                title="Please enter a valid email address"
               />
             </div>
 
@@ -98,7 +108,14 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
+                maxLength={128}
+                autoComplete="new-password"
+                title="Password must be between 6 and 128 characters"
               />
+              <p className="text-xs text-muted-foreground">
+                Must be at least 6 characters
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -112,6 +129,10 @@ export default function RegisterPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
+                minLength={6}
+                maxLength={128}
+                autoComplete="new-password"
+                title="Please confirm your password"
               />
             </div>
 

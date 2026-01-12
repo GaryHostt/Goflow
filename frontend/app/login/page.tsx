@@ -8,6 +8,8 @@ import { auth, setToken } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { XCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -24,14 +26,17 @@ export default function LoginPage() {
     try {
       const response = await auth.login(email, password)
       
-      if (response.token) {
-        setToken(response.token)
+      if (response.token || response.data?.token) {
+        const token = response.token || response.data.token
+        setToken(token)
         router.push('/dashboard')
       } else {
         setError('Login failed. Please check your credentials.')
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.')
+    } catch (err: any) {
+      // Display the specific error message
+      setError(err.message || 'An error occurred. Please try again.')
+      console.error('Login error:', err)
     } finally {
       setLoading(false)
     }
@@ -56,9 +61,11 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-                {error}
-              </div>
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
             
             <div className="space-y-2">
@@ -72,6 +79,9 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
+                pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+                title="Please enter a valid email address"
               />
             </div>
 
@@ -86,6 +96,10 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
+                maxLength={128}
+                autoComplete="current-password"
+                title="Password must be at least 6 characters"
               />
             </div>
 

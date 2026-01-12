@@ -21,15 +21,15 @@ import (
 func main() {
 	// Initialize structured logger (ELK-ready!)
 	appLogger := logger.NewLogger("ipaas-api")
-	appLogger.Info("Starting iPaaS API Server...", map[string]interface{}{
-		"version": "0.2.0",
+	appLogger.Info("Starting GoFlow API Server...", map[string]interface{}{
+		"version": "0.4.0",
 		"env":     getEnv("ENVIRONMENT", "development"),
 	})
 
-	// Initialize database
-	database, err := db.New("ipaas.db")
+	// Initialize database with retry logic for Docker/production environments
+	database, err := initializeDatabaseWithRetry(appLogger, 10, 2*time.Second)
 	if err != nil {
-		appLogger.Error("Failed to initialize database", map[string]interface{}{
+		appLogger.Error("Failed to initialize database after retries", map[string]interface{}{
 			"error": err.Error(),
 		})
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -48,6 +48,9 @@ func main() {
 
 	// Setup router
 	router := mux.NewRouter()
+
+	// Add request logging middleware (tracks all HTTP requests with status codes & timing)
+	router.Use(middleware.RequestLogger(appLogger))
 
 	// Public routes
 	authHandler := handlers.NewAuthHandler(database)
@@ -85,6 +88,15 @@ func main() {
 	// Logs routes
 	logsHandler := handlers.NewLogsHandler(database)
 	api.HandleFunc("/logs", logsHandler.GetLogs).Methods("GET")
+
+	// Kong Gateway integration routes
+	kongHandler := handlers.NewKongHandler(database, getEnv("KONG_ADMIN_URL", "http://kong:8001"))
+	api.HandleFunc("/kong/services", kongHandler.CreateKongService).Methods("POST")
+	api.HandleFunc("/kong/services", kongHandler.ListKongServices).Methods("GET")
+	api.HandleFunc("/kong/services/{id}", kongHandler.DeleteKongService).Methods("DELETE")
+	api.HandleFunc("/kong/routes", kongHandler.CreateKongRoute).Methods("POST")
+	api.HandleFunc("/kong/plugins", kongHandler.AddKongPlugin).Methods("POST")
+	api.HandleFunc("/kong/templates", kongHandler.CreateUseCaseTemplate).Methods("POST")
 
 	// PRODUCTION FIX: Use battle-tested CORS library instead of manual headers
 	corsHandler := cors.New(cors.Options{
@@ -286,4 +298,58 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// initializeDatabaseWithRetry attempts to initialize the database with exponential backoff
+// This is critical for Docker environments where the DB container might not be ready immediately
+func initializeDatabaseWithRetry(logger *logger.Logger, maxRetries int, initialDelay time.Duration) (*db.Database, error) {
+	dbPath := getEnv("DB_PATH", "ipaas.db")
+	delay := initialDelay
+
+	logger.Info("Initializing database with retry logic", map[string]interface{}{
+		"db_path":     dbPath,
+		"max_retries": maxRetries,
+	})
+
+	var err error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		database, err := db.New(dbPath)
+		if err == nil {
+			// Success! Test the connection with a simple query
+			pingErr := database.Ping()
+			if pingErr == nil {
+				logger.Info("Database connection successful", map[string]interface{}{
+					"attempt": attempt,
+				})
+				return database, nil
+			}
+			// Close the database if ping failed
+			database.Close()
+			err = pingErr
+		}
+
+		// Log the failure
+		logger.Warn("Database initialization failed, retrying...", map[string]interface{}{
+			"attempt":      attempt,
+			"max_retries":  maxRetries,
+			"error":        err.Error(),
+			"retry_in":     delay.String(),
+		})
+
+		// If this was the last attempt, return the error
+		if attempt == maxRetries {
+			return nil, err
+		}
+
+		// Wait before retrying with exponential backoff
+		time.Sleep(delay)
+		
+		// Exponential backoff: double the delay each time (max 30 seconds)
+		delay *= 2
+		if delay > 30*time.Second {
+			delay = 30 * time.Second
+		}
+	}
+
+	return nil, err
 }

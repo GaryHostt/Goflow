@@ -26,8 +26,9 @@ CREATE TABLE IF NOT EXISTS workflows (
     user_id TEXT NOT NULL,
     name TEXT NOT NULL,
     trigger_type TEXT NOT NULL, -- 'webhook', 'schedule'
-    action_type TEXT NOT NULL,  -- 'slack_message', 'discord_post', 'weather_check'
+    action_type TEXT NOT NULL,  -- 'slack_message', 'discord_post', 'weather_check' (primary action)
     config_json TEXT NOT NULL,  -- Stores params like channel IDs or thresholds
+    action_chain TEXT,          -- JSON array of additional actions to execute sequentially (new!)
     is_active BOOLEAN DEFAULT 1,
     last_executed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

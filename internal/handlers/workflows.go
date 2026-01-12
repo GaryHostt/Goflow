@@ -25,11 +25,13 @@ func NewWorkflowsHandler(store db.Store, executor *engine.Executor) *WorkflowsHa
 }
 
 type CreateWorkflowRequest struct {
-	Name        string `json:"name"`
-	TriggerType string `json:"trigger_type"` // 'webhook', 'schedule'
-	ActionType  string `json:"action_type"`  // 'slack_message', 'discord_post', 'weather_check'
-	ConfigJSON  string `json:"config_json"`
+	Name        string                  `json:"name"`
+	TriggerType string                  `json:"trigger_type"` // 'webhook', 'schedule'
+	ActionType  string                  `json:"action_type"`  // 'slack_message', 'discord_post', 'weather_check'
+	ConfigJSON  string                  `json:"config_json"`
+	ActionChain []models.ChainedAction  `json:"action_chain"` // Optional: additional actions to execute sequentially
 }
+
 
 // DryRunRequest represents a test execution request without saving
 type DryRunRequest struct {
@@ -86,7 +88,33 @@ func (h *WorkflowsHandler) CreateWorkflow(w http.ResponseWriter, r *http.Request
 		req.ConfigJSON = "{}"
 	}
 
-	workflow, err := h.store.CreateWorkflow(userID, req.Name, req.TriggerType, req.ActionType, req.ConfigJSON)
+	// Handle action chain if present
+	var actionChainJSON string
+	if len(req.ActionChain) > 0 {
+		chainBytes, err := json.Marshal(req.ActionChain)
+		if err != nil {
+			http.Error(w, "Invalid action_chain format", http.StatusBadRequest)
+			return
+		}
+		actionChainJSON = string(chainBytes)
+	}
+
+	// Create workflow with or without action chain
+	var workflow *models.Workflow
+	var err error
+	
+	if actionChainJSON != "" {
+		// Use CreateWorkflowWithChain method
+		if creator, ok := h.store.(*db.Database); ok {
+			workflow, err = creator.CreateWorkflowWithChain(userID, req.Name, req.TriggerType, req.ActionType, req.ConfigJSON, actionChainJSON)
+		} else {
+			// Fallback for mock store
+			workflow, err = h.store.CreateWorkflow(userID, req.Name, req.TriggerType, req.ActionType, req.ConfigJSON)
+		}
+	} else {
+		workflow, err = h.store.CreateWorkflow(userID, req.Name, req.TriggerType, req.ActionType, req.ConfigJSON)
+	}
+	
 	if err != nil {
 		http.Error(w, "Failed to create workflow", http.StatusInternalServerError)
 		return
