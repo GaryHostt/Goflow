@@ -128,6 +128,50 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// DevLogin handles development mode auto-login
+// Creates a dev user if it doesn't exist, then logs in
+// ONLY USE IN DEVELOPMENT - DO NOT ENABLE IN PRODUCTION
+func (h *AuthHandler) DevLogin(w http.ResponseWriter, r *http.Request) {
+	const (
+		devEmail    = "dev@goflow.local"
+		devPassword = "dev123"
+	)
+
+	// Try to get existing dev user
+	user, err := h.store.GetUserByEmail(devEmail)
+	
+	// If user doesn't exist, create it
+	if err != nil {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(devPassword), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, "Failed to create dev user", http.StatusInternalServerError)
+			return
+		}
+
+		user, err = h.store.CreateUser(devEmail, string(hashedPassword))
+		if err != nil {
+			http.Error(w, "Failed to create dev user", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Generate JWT
+	token, err := generateJWT(user.ID)
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	// Return response
+	response := models.AuthResponse{
+		Token: token,
+		User:  *user,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // generateJWT creates a new JWT token for a user
 func generateJWT(userID string) (string, error) {
 	// TODO: MULTI-TENANT - Add tenant_id to claims

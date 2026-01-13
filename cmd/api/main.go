@@ -56,6 +56,12 @@ func main() {
 	authHandler := handlers.NewAuthHandler(database)
 	router.HandleFunc("/api/auth/register", authHandler.Register).Methods("POST")
 	router.HandleFunc("/api/auth/login", authHandler.Login).Methods("POST")
+	
+	// Dev mode endpoint (only enable in development)
+	if getEnv("ENVIRONMENT", "development") == "development" {
+		router.HandleFunc("/api/auth/dev-login", authHandler.DevLogin).Methods("POST")
+		appLogger.Info("Dev mode enabled - /api/auth/dev-login endpoint available", nil)
+	}
 
 	// Webhook handler (public but workflow-specific)
 	webhookHandler := handlers.NewWebhookHandler(database, executor)

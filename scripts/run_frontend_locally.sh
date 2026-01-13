@@ -16,8 +16,9 @@ cd /Users/alex.macdonald/simple-ipass/frontend
 echo "📋 Step 1/3: Creating environment configuration..."
 cat > .env.local << 'EOF'
 NEXT_PUBLIC_API_URL=http://localhost:8080/api
+NEXT_PUBLIC_DEV_MODE=true
 EOF
-echo "✅ Environment configured"
+echo "✅ Environment configured (Dev Mode: ENABLED)"
 echo ""
 
 # Step 2: Check if node_modules exists

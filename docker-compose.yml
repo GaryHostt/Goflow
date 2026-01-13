@@ -52,6 +52,8 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8080/api
+        # Uncomment to enable dev mode in Docker:
+        # NEXT_PUBLIC_DEV_MODE: "true"
     container_name: ipaas-frontend
     ports:
       - "3000:3000"

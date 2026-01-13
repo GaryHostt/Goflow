@@ -7,6 +7,7 @@ A **production-ready** enterprise integration platform (iPaaS) built with **Go**
 This project has evolved from a POC to a **Production-Ready Enterprise Platform** with professional software engineering practices and **comprehensive testing**:
 
 - ✅ **ALL TESTS PASSING** - 18 connectors + 5 Kong patterns validated (Jan 12, 2026) 🎉 🆕
+- ✅ **Dev Mode** - One-click skip login for rapid integration development ⚡ 🆕
 - ✅ **Kong Gateway** - Enterprise API management with ELK log shipping active
 - ✅ **SOAP Bridge** - Legacy protocol modernization (SOAP → REST)
 - ✅ **ELK Integration** - Kong logs → Logstash → Elasticsearch (verified working) 🆕
@@ -23,6 +24,26 @@ This project has evolved from a POC to a **Production-Ready Enterprise Platform*
 See [PRODUCTION_QUALITY.md](PRODUCTION_QUALITY.md) for detailed architecture analysis.
 
 ## Features
+
+### ⚡ NEW in v0.7.0: Dev Mode - Skip Login
+
+**The fastest way to start building integrations!**
+
+- ✅ **One-Click Login** - Skip registration completely
+- ✅ **Auto-Create Dev User** - `dev@goflow.local` created automatically
+- ✅ **Instant Dashboard Access** - Jump straight to workflow building
+- ✅ **Development Only** - Automatically disabled in production
+- ✅ **Perfect for Testing** - Rapid iteration without auth hassle
+
+**Quick Start:**
+```bash
+./scripts/run_frontend_locally.sh
+# Click "Skip Login - Dev Mode" → You're in! 🎉
+```
+
+See **[DEV_MODE_GUIDE.md](DEV_MODE_GUIDE.md)** for complete documentation!
+
+---
 
 ### 🧪 NEW in v0.6.0: Comprehensive Testing & Validation
 
@@ -100,6 +121,7 @@ See **[NEW_CONNECTORS.md](NEW_CONNECTORS.md)** for complete documentation!
 
 ### Core Functionality
 - ✅ **User Authentication** - JWT-based auth with register/login
+- ✅ **Dev Mode** - One-click skip login for rapid development ⚡ 🆕
 - ✅ **Workflow Management** - Create, enable/disable, delete workflows
 - ✅ **Multiple Triggers** - Webhook and scheduled (polling) triggers
 - ✅ **18 Third-Party Connectors** - Slack, Discord, Twilio, SOAP, SWAPI, Salesforce, PokeAPI, Bored API, Numbers API, NASA, REST Countries, Dog CEO, News API, Cat API, Fake Store, OpenWeather
@@ -317,7 +339,39 @@ docker-compose up -d
 
 That's it! The platform is now running with production-like infrastructure.
 
-### Option 2: Local Development
+### Option 2: ⚡ Dev Mode - Skip Login (Fastest for Integration Development)
+
+**Perfect for rapid workflow development - bypass authentication completely!**
+
+1. **Start backend** (in Docker or locally)
+   ```bash
+   docker compose up -d backend postgres
+   # OR
+   go run cmd/api/main.go
+   ```
+
+2. **Start frontend** with dev mode
+   ```bash
+   ./scripts/run_frontend_locally.sh
+   ```
+
+3. **Open**: http://localhost:3000
+
+4. **Click**: "Skip Login - Dev Mode" button (orange button with ⚡ icon)
+
+5. **Done!** You're instantly logged in and redirected to the dashboard
+
+**Benefits:**
+- ⚡ **Instant access** - No registration or login needed
+- 🔄 **Auto-creates dev user** - `dev@goflow.local` created on first use
+- 🚀 **Fast iteration** - Hot reload, immediate feedback
+- 🔒 **Dev-only** - Automatically disabled in production
+
+See **[DEV_MODE_GUIDE.md](DEV_MODE_GUIDE.md)** for complete documentation!
+
+---
+
+### Option 3: Local Development (Manual Setup)
 
 #### Prerequisites
 - Go 1.21 or higher
