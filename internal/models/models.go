@@ -29,11 +29,22 @@ type Workflow struct {
 	ActionType      string         `json:"action_type"`      // Primary action: 'slack_message', 'discord_post', 'weather_check', etc.
 	ConfigJSON      string         `json:"config_json"`      // Primary action configuration
 	ActionChain     string         `json:"action_chain"`     // JSON array of additional actions to execute sequentially
+	Parameters      string         `json:"parameters"`       // JSON array of runtime parameters
 	ParsedChain     []ChainedAction `json:"parsed_chain,omitempty"` // Parsed action chain (not stored in DB)
+	ParsedParameters []WorkflowParameter `json:"parsed_parameters,omitempty"` // Parsed parameters (not stored in DB)
 	TriggerPayload  string         `json:"trigger_payload,omitempty"` // JSON payload from webhook trigger for template mapping
 	IsActive        bool           `json:"is_active"`
 	LastExecutedAt  *time.Time     `json:"last_executed_at,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
+}
+
+// WorkflowParameter represents a runtime parameter for a workflow
+type WorkflowParameter struct {
+	Name         string      `json:"name"`                    // Parameter name (e.g., "customer_name")
+	Type         string      `json:"type"`                    // string, number, boolean, object, array
+	Required     bool        `json:"required"`                // Whether parameter must be provided
+	DefaultValue interface{} `json:"default_value,omitempty"` // Default value if not provided
+	Description  string      `json:"description,omitempty"`   // Human-readable description
 }
 
 // ChainedAction represents an additional action in a workflow chain
@@ -134,6 +145,12 @@ type WorkflowConfig struct {
 	SalesforceQuery      string                 `json:"salesforce_query,omitempty"`       // SOQL query
 	SalesforceData       map[string]interface{} `json:"salesforce_data,omitempty"`        // Data for create/update
 	SalesforceInstanceURL string                 `json:"salesforce_instance_url,omitempty"` // Override instance URL
+	
+	// For Testing/Mock Response action (NEW!)
+	TestingResponseJSON  string                 `json:"testing_response_json,omitempty"`  // Custom JSON response to return
+	TestingStatusCode    int                    `json:"testing_status_code,omitempty"`    // HTTP status code (default: 200)
+	TestingDelay         int                    `json:"testing_delay,omitempty"`          // Delay in milliseconds before responding
+	TestingHeaders       map[string]string      `json:"testing_headers,omitempty"`        // Custom response headers
 	
 	// General purpose field for custom data
 	CustomData map[string]interface{} `json:"custom_data,omitempty"`

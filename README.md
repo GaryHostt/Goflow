@@ -293,7 +293,45 @@ This project follows a clear evolution from POC → Production → Enterprise. S
 
 ## 🚀 Quick Start
 
-### **Option 1: Manual (Two Terminals) - Fastest for Development**
+### **🎯 Fastest Way: One-Command Startup**
+
+```bash
+cd /Users/alex.macdonald/simple-ipass
+./scripts/start_platform.sh
+```
+
+✅ Starts everything: Backend + Frontend + Kong + Database + ELK  
+✅ Shows real-time status  
+✅ Displays all access URLs  
+
+**See [START_HERE.md](START_HERE.md) for complete startup guide!**
+
+---
+
+### **Option 1: Full Docker Stack (Production-Like)**
+
+```bash
+cd /Users/alex.macdonald/simple-ipass
+
+# Start all services
+make docker-up-build
+
+# Or directly with Docker Compose
+docker compose up -d --build
+```
+
+**Services started:**
+- ✅ Backend API (Go) - http://localhost:8080
+- ✅ Frontend (Next.js) - http://localhost:3000
+- ✅ Kong Gateway - http://localhost:8000
+- ✅ PostgreSQL + ELK Stack
+- ✅ Full monitoring & logging
+
+**Then:** Open http://localhost:3000 and click **"Skip Login - Dev Mode"**
+
+---
+
+### **Option 2: Local Development (Fastest Iteration)**
 
 **Terminal 1 - Backend:**
 ```bash
@@ -304,19 +342,22 @@ go run cmd/api/main.go
 **Terminal 2 - Frontend:**
 ```bash
 cd /Users/alex.macdonald/simple-ipass/frontend
-npm install  # First time only, run this first
-npm run dev  # Then run this after install completes
+npm install  # First time only
+npm run dev
 ```
 
-**Then open:** http://localhost:3000
+**Then:** Open http://localhost:3000
 
-**⚠️ Important:** Don't run `npm install # comment` as one command - separate the commands!
+---
 
-### **Option 2: Docker (One Command) - Full Production Stack**
+### **📚 Detailed Guides**
 
-See the full installation section below for Docker Compose setup with ELK stack.
+- **[START_HERE.md](START_HERE.md)** - Complete startup guide with troubleshooting
+- **[START_APP_AND_PROXY.md](START_APP_AND_PROXY.md)** - Detailed Docker & Kong setup
+- **[COMPONENT_RUNNING_GUIDE.md](COMPONENT_RUNNING_GUIDE.md)** - Run individual components
+- **[DEV_MODE_GUIDE.md](DEV_MODE_GUIDE.md)** - Skip login development mode
 
-**Troubleshooting?** See **[STARTUP_GUIDE.md](STARTUP_GUIDE.md)** for detailed help.
+**Troubleshooting?** Check [START_HERE.md](START_HERE.md) for solutions!
 
 ---
 

@@ -216,6 +216,8 @@ func (e *Executor) executeWorkflowInternal(ctx context.Context, workflow models.
 		result = e.executeSWAPIAction(ctx, userID, tenantID, config)
 	case "salesforce":
 		result = e.executeSalesforceAction(ctx, userID, tenantID, config)
+	case "testing":
+		result = e.executeTestingAction(ctx, userID, tenantID, config, workflow.TriggerPayload)
 	default:
 		result = connectors.Result{
 			Status:    "failed",
@@ -758,6 +760,82 @@ func (e *Executor) executeSalesforceAction(ctx context.Context, userID, tenantID
 	}
 
 	return salesforceConnector.ExecuteWithContext(ctx, salesforceConfig)
+}
+
+// executeTestingAction returns a custom JSON response for testing/mocking
+func (e *Executor) executeTestingAction(ctx context.Context, userID, tenantID string, config models.WorkflowConfig, triggerPayload string) connectors.Result {
+	start := time.Now()
+	
+	// Check context
+	select {
+	case <-ctx.Done():
+		return connectors.Result{
+			Status:    "cancelled",
+			Message:   ctx.Err().Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	default:
+	}
+
+	// Get the custom JSON response
+	responseJSON := config.TestingResponseJSON
+	if responseJSON == "" {
+		responseJSON = `{"message": "Test response", "status": "success", "timestamp": "` + time.Now().Format(time.RFC3339) + `"}`
+	}
+
+	// Apply template mapping if trigger payload exists
+	if triggerPayload != "" {
+		responseJSON = e.templateEngine.Render(responseJSON, triggerPayload)
+	}
+
+	// Parse the JSON to ensure it's valid
+	var responseData map[string]interface{}
+	if err := json.Unmarshal([]byte(responseJSON), &responseData); err != nil {
+		e.log.Error("Invalid testing response JSON", map[string]interface{}{
+			"user_id":   userID,
+			"tenant_id": tenantID,
+			"error":     err.Error(),
+		})
+		return connectors.Result{
+			Status:    "failed",
+			Message:   fmt.Sprintf("Invalid JSON format: %v", err),
+			Duration:  time.Since(start).String(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	// Simulate delay if configured
+	if config.TestingDelay > 0 {
+		time.Sleep(time.Duration(config.TestingDelay) * time.Millisecond)
+	}
+
+	// Get status code (default 200)
+	statusCode := config.TestingStatusCode
+	if statusCode == 0 {
+		statusCode = 200
+	}
+
+	// Log successful execution
+	e.log.WorkflowLog(
+		logger.LevelInfo,
+		"Testing response executed",
+		"", // no workflow ID in this context
+		userID,
+		tenantID,
+		map[string]interface{}{
+			"status_code": statusCode,
+			"delay_ms":    config.TestingDelay,
+			"has_headers": len(config.TestingHeaders) > 0,
+		},
+	)
+
+	return connectors.Result{
+		Status:    "success",
+		Message:   fmt.Sprintf("Mock response returned with status %d", statusCode),
+		Data:      responseData,
+		Duration:  time.Since(start).String(),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
 }
 
 // Shutdown gracefully stops the executor

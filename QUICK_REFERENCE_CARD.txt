@@ -1,0 +1,140 @@
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃              🎉 NEW FEATURES - QUICK REFERENCE                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+📦 FEATURE 1: TESTING/MOCK ACTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  What: Return custom JSON responses for testing & mocking APIs
+  Use:  Testing workflows without external dependencies
+
+  Configuration:
+    • testing_response_json   → Custom JSON to return
+    • testing_status_code     → HTTP status (200, 404, 500)
+    • testing_delay          → Delay in milliseconds
+    • testing_headers        → Custom headers (optional)
+
+  Templates Supported:
+    Use {{field.name}} for dynamic data from webhooks
+
+  Example:
+    {"user": "{{user.name}}", "order": "{{order.id}}"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 FEATURE 2: INTERACTIVE FLOW DIAGRAM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  What: Clickable flow diagram for inline editing
+  Use:  Edit trigger & action config directly from visual flow
+
+  How It Works:
+    1. Click trigger box  → Edit interval or view webhook
+    2. Click action box   → Edit message, JSON, query, etc.
+    3. Edit in modal      → Changes sync to main form
+    4. Save & continue    → Workflow creation continues
+
+  Features:
+    ✅ Hover effects with edit icons
+    ✅ Modal dialogs for each element
+    ✅ Real-time form synchronization
+    ✅ Smooth animations
+    ✅ Context-aware fields
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 QUICK START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Install Dependencies
+     cd frontend && npm install
+
+  2. Start Platform
+     ./scripts/start_platform.sh
+
+  3. Create Testing Workflow
+     • Go to: Create Workflow
+     • Select: Testing/Mock Response
+     • Click action box in flow diagram
+     • Configure JSON response
+     • Create & trigger!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 USE CASES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Mock API Endpoint
+     → Return test data for frontend development
+
+  2. Error Simulation
+     → Test error handling with 404/500 status codes
+
+  3. Latency Testing
+     → Simulate slow APIs with delays
+
+  4. A/B Testing
+     → Multiple workflows = different responses
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 EXAMPLE WORKFLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Name: Mock User API
+  Trigger: Webhook
+  Action: Testing/Mock Response
+  
+  Config:
+  {
+    "testing_response_json": "{\"id\": 123, \"name\": \"Test\"}",
+    "testing_status_code": 200,
+    "testing_delay": 100
+  }
+
+  Result:
+  {
+    "status": "success",
+    "data": {"id": 123, "name": "Test"},
+    "duration": "105ms"
+  }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 FILES CHANGED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Backend:
+    • internal/models/models.go
+    • internal/engine/executor.go
+    • internal/handlers/workflows.go
+
+  Frontend:
+    • components/WorkflowFlowDiagram.tsx
+    • components/ui/dialog.tsx (NEW)
+    • components/ui/textarea.tsx (NEW)
+    • app/dashboard/workflows/new/page.tsx
+    • package.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ COMPATIBILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✅ Fully backward compatible
+  ✅ No database migration needed
+  ✅ Existing workflows unaffected
+  ✅ Optional features (use when needed)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  NEW_FEATURES_GUIDE.md       → Complete usage guide
+  FEATURES_IMPLEMENTATION.md  → Implementation summary
+  QUICK_REFERENCE_CARD.txt    → This file
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 READY TO USE! Both features are production-ready!

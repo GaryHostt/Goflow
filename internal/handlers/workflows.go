@@ -72,7 +72,19 @@ func (h *WorkflowsHandler) CreateWorkflow(w http.ResponseWriter, r *http.Request
 
 	// Validate trigger and action types
 	validTriggers := map[string]bool{"webhook": true, "schedule": true}
-	validActions := map[string]bool{"slack_message": true, "discord_post": true, "weather_check": true}
+	validActions := map[string]bool{
+		"slack_message":   true,
+		"discord_post":    true,
+		"twilio_sms":      true,
+		"weather_check":   true,
+		"news_fetch":      true,
+		"cat_fetch":       true,
+		"fakestore_fetch": true,
+		"soap_call":       true,
+		"swapi_fetch":     true,
+		"salesforce":      true,
+		"testing":         true, // NEW: Mock/testing endpoint
+	}
 
 	if !validTriggers[req.TriggerType] {
 		http.Error(w, "Invalid trigger_type. Must be 'webhook' or 'schedule'", http.StatusBadRequest)
@@ -80,7 +92,7 @@ func (h *WorkflowsHandler) CreateWorkflow(w http.ResponseWriter, r *http.Request
 	}
 
 	if !validActions[req.ActionType] {
-		http.Error(w, "Invalid action_type. Must be 'slack_message', 'discord_post', or 'weather_check'", http.StatusBadRequest)
+		http.Error(w, "Invalid action_type", http.StatusBadRequest)
 		return
 	}
 

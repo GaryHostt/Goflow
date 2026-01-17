@@ -49,28 +49,44 @@ start: ## Start both backend and frontend (requires two terminals)
 	@echo "Use './start.sh' to start both services in one terminal"
 	@echo "Or run 'make dev' in one terminal and 'make frontend' in another"
 
-docker-up: ## Start all services with Docker Compose (PostgreSQL, Backend, Frontend, ELK)
-	@echo "Starting iPaaS platform with Docker Compose..."
-	docker-compose up -d
+docker-up: ## Start all services with Docker Compose (PostgreSQL, Backend, Frontend, Kong, ELK)
+	@echo "Starting GoFlow platform with Docker Compose..."
+	docker compose up -d
 	@echo "✅ Platform is running!"
 	@echo "Frontend: http://localhost:3000"
 	@echo "Backend API: http://localhost:8080"
+	@echo "Kong Gateway: http://localhost:8000"
 	@echo "Kibana (logs): http://localhost:5601"
+
+docker-up-build: ## Start all services with rebuild
+	@echo "Starting GoFlow platform with fresh build..."
+	docker compose up -d --build
+	@echo "✅ Platform is running!"
+	@echo "Frontend: http://localhost:3000"
+	@echo "Backend API: http://localhost:8080"
+	@echo "Kong Gateway: http://localhost:8000"
+	@echo "Kibana (logs): http://localhost:5601"
+
+start-platform: ## Start the full platform with Kong Gateway (convenience script)
+	@./scripts/start_platform.sh
+
+start-platform-kong: ## Start platform and configure Kong
+	@./scripts/start_platform.sh --configure-kong
 
 docker-down: ## Stop all Docker services
 	@echo "Stopping Docker services..."
-	docker-compose down
+	docker compose down
 
 docker-logs: ## View Docker logs
-	docker-compose logs -f
+	docker compose logs -f
 
 docker-build: ## Build Docker images
 	@echo "Building Docker images..."
-	docker-compose build
+	docker compose build
 
 docker-clean: ## Remove Docker containers, volumes, and images
 	@echo "Cleaning Docker resources..."
-	docker-compose down -v
+	docker compose down -v
 	docker system prune -f
 
 test: ## Run unit tests (fast, uses MockStore)
